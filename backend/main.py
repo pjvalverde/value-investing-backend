@@ -200,42 +200,59 @@ def get_portfolio():
         return JSONResponse(content={"error": "No se ha generado un portafolio aún."}, status_code=404)
     return JSONResponse(content=last_portfolio["portfolio"])
 
-# Endpoint para obtener la justificación (DeepSeek API)
+# Endpoint para obtener la justificación (Claude API)
 @app.get("/justification")
 async def justification():
+    import os
+    import requests
     # Usar el último portafolio generado
     global last_portfolio
     if not last_portfolio or "portfolio" not in last_portfolio:
         return JSONResponse(content={"error": "Primero genera un portafolio."}, status_code=400)
     portfolio = last_portfolio["portfolio"]
     tickers = [a["ticker"] for a in portfolio if a["tipo"] in ["Acción", "ETF"]]
-    # Preparar prompt para DeepSeek
+    # Preparar prompt para Claude
     prompt = (
         "Eres un analista de inversiones. Explica de manera detallada por qué las siguientes acciones y ETFs fueron seleccionados para el portafolio de un inversionista considerando su sector, peso, métricas clave y contexto de mercado. Hazlo en español y sé específico para cada ticker: " + ", ".join(tickers)
     )
-    DEEPSEEK_API_KEY = os.getenv("DEEPSEEK_API_KEY")
-    url = "https://api.deepseek.com/v1/chat/completions"
+    CLAUDE_API_KEY = os.getenv("CLAUDE_API_KEY")
+    url = "https://api.anthropic.com/v1/messages"
     headers = {
-        "Authorization": f"Bearer {DEEPSEEK_API_KEY}",
-        "Content-Type": "application/json"
+        "x-api-key": CLAUDE_API_KEY,
+        "anthropic-version": "2023-06-01",
+        "content-type": "application/json"
     }
     data = {
-        "model": "deepseek-chat",
-        "messages": [
-            {"role": "system", "content": "Eres un analista financiero experto en Value Investing."},
-            {"role": "user", "content": prompt}
-        ],
+        "model": "claude-3-sonnet-20240229",
+        "max_tokens": 1024,
         "temperature": 0.7,
-        "max_tokens": 900
+        "messages": [
+            {"role": "user", "content": prompt}
+        ]
     }
     try:
-        resp = requests.post(url, headers=headers, json=data, timeout=25)
+        resp = requests.post(url, headers=headers, json=data, timeout=60)
         resp.raise_for_status()
         result = resp.json()
-        content = result["choices"][0]["message"]["content"]
+        content = result["content"][0]["text"] if "content" in result and result["content"] else ""
         if not content or len(content.strip()) < 10:
-            logging.error(f"DeepSeek devolvió respuesta vacía: {result}")
-            return JSONResponse(content={"error": "DeepSeek no devolvió un análisis válido."}, status_code=500)
+            logging.error(f"Claude devolvió respuesta vacía: {result}")
+            return JSONResponse(content={"error": "Claude no devolvió un análisis válido."}, status_code=500)
+        # Preparar métricas para la tabla comparativa
+        metrics = []
+        for a in portfolio:
+            if a["tipo"] in ["Acción", "ETF"]:
+                metrics.append({
+                    "ticker": a["ticker"],
+                    "sector": a.get("sector", ""),
+                    "ROE": a.get("ROE", None),
+                    "PE": a.get("PE", None),
+                    "margen_beneficio": a.get("margen_beneficio", None),
+                    "ratio_deuda": a.get("ratio_deuda", None),
+                    "crecimiento_fcf": a.get("crecimiento_fcf", None),
+                    "moat": a.get("moat", None)
+                })
+        return {"analysis": content, "metrics": metrics}
         return {"html": content}
     except Exception as e:
         logging.error(f"Error al conectar con DeepSeek: {e}")
