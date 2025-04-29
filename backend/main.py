@@ -269,7 +269,68 @@ async def justification():
         logging.error(f"Error al conectar con Claude: {e}")
         return JSONResponse(content={"error": f"Error al conectar con Claude: {str(e)}"}, status_code=500)
 
-# Endpoint para obtener visualizaciones (imágenes generadas por Python)
+@app.get("/justification/accion")
+async def justification_accion(ticker: str):
+    import os
+    import requests
+    global last_portfolio
+    if not last_portfolio or "portfolio" not in last_portfolio:
+        return JSONResponse(content={"error": "Primero genera un portafolio."}, status_code=400)
+    portfolio = last_portfolio["portfolio"]
+    tickers = [a["ticker"] for a in portfolio if a["tipo"] in ["Acción", "ETF"]]
+    # Obtener el análisis general primero
+    prompt_general = (
+        "Eres un analista de inversiones. Explica de manera detallada por qué las siguientes acciones y ETFs fueron seleccionados para el portafolio de un inversionista considerando su sector, peso, métricas clave y contexto de mercado. Hazlo en español y sé específico para cada ticker: " + ", ".join(tickers)
+    )
+    CLAUDE_API_KEY = os.getenv("CLAUDE_API_KEY")
+    url = "https://api.anthropic.com/v1/messages"
+    headers = {
+        "x-api-key": CLAUDE_API_KEY,
+        "anthropic-version": "2023-06-01",
+        "content-type": "application/json"
+    }
+    data_general = {
+        "model": "claude-3-7-sonnet-20250219",
+        "max_tokens": 1200,
+        "temperature": 0.7,
+        "messages": [
+            {"role": "user", "content": prompt_general}
+        ]
+    }
+    try:
+        resp_general = requests.post(url, headers=headers, json=data_general, timeout=60)
+        resp_general.raise_for_status()
+        result_general = resp_general.json()
+        analysis_general = ""
+        if "content" in result_general and result_general["content"]:
+            analysis_general = result_general["content"][0]["text"]
+        if not analysis_general or len(analysis_general.strip()) < 10:
+            return JSONResponse(content={"error": "Claude no devolvió análisis general."}, status_code=500)
+        # Ahora pedirle a Claude que extraiga SOLO el fragmento para el ticker
+        prompt_extract = (
+            f"Del siguiente análisis de portafolio, extrae y devuelve únicamente el análisis detallado correspondiente a la acción o ETF con ticker '{ticker}'. Si no existe, responde 'No hay análisis para este ticker'.\n\nAnálisis completo:\n" + analysis_general + f"\n\nDevuelve solo el análisis de {ticker}, en HTML resaltando en amarillo el bloque principal."
+        )
+        data_extract = {
+            "model": "claude-3-7-sonnet-20250219",
+            "max_tokens": 600,
+            "temperature": 0.3,
+            "messages": [
+                {"role": "user", "content": prompt_extract}
+            ]
+        }
+        resp_extract = requests.post(url, headers=headers, json=data_extract, timeout=60)
+        resp_extract.raise_for_status()
+        result_extract = resp_extract.json()
+        fragment = ""
+        if "content" in result_extract and result_extract["content"]:
+            fragment = result_extract["content"][0]["text"]
+        if not fragment or len(fragment.strip()) < 10:
+            return JSONResponse(content={"error": "Claude no devolvió análisis individual."}, status_code=500)
+        return {"analysis": fragment}
+    except Exception as e:
+        logging.error(f"Error al obtener análisis individual de Claude: {e}")
+        return JSONResponse(content={"error": f"Error al obtener análisis individual: {str(e)}"}, status_code=500)
+
 @app.get("/visualizations/{img_name}")
 def get_visualization(img_name: str):
     img_path = os.path.join(RESULTS_DIR, img_name)
