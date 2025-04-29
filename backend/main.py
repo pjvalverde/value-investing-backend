@@ -216,27 +216,40 @@ async def justification():
         "Eres un analista de inversiones. Explica de manera detallada por qué las siguientes acciones y ETFs fueron seleccionados para el portafolio de un inversionista considerando su sector, peso, métricas clave y contexto de mercado. Hazlo en español y sé específico para cada ticker: " + ", ".join(tickers)
     )
     CLAUDE_API_KEY = os.getenv("CLAUDE_API_KEY")
-    url = "https://api.anthropic.com/v1/messages"
+    url = "https://api.anthropic.com/v1/messages/batches"
     headers = {
         "x-api-key": CLAUDE_API_KEY,
         "anthropic-version": "2023-06-01",
+        "anthropic-beta": "message-batches-2024-09-24",
         "content-type": "application/json"
     }
-    data = {
-        "model": "claude-3-sonnet-20240229",
-        "max_tokens": 1024,
-        "temperature": 0.7,
-        "messages": [
-            {"role": "user", "content": prompt}
+    batch_data = {
+        "requests": [
+            {
+                "custom_id": "portfolio-analysis",
+                "params": {
+                    "model": "claude-3-7-sonnet-20250219",
+                    "max_tokens": 1024,
+                    "temperature": 0.7,
+                    "messages": [
+                        {"role": "user", "content": prompt}
+                    ]
+                }
+            }
         ]
     }
     try:
-        resp = requests.post(url, headers=headers, json=data, timeout=60)
+        resp = requests.post(url, headers=headers, json=batch_data, timeout=60)
         resp.raise_for_status()
         result = resp.json()
-        content = result["content"][0]["text"] if "content" in result and result["content"] else ""
+        # Extraer el análisis del batch
+        content = ""
+        if "responses" in result and result["responses"]:
+            response = result["responses"][0]
+            if "content" in response and response["content"]:
+                content = response["content"][0]["text"]
         if not content or len(content.strip()) < 10:
-            logging.error(f"Claude devolvió respuesta vacía: {result}")
+            logging.error(f"Claude batch devolvió respuesta vacía: {result}")
             return JSONResponse(content={"error": "Claude no devolvió un análisis válido."}, status_code=500)
         # Preparar métricas para la tabla comparativa
         metrics = []
@@ -254,8 +267,8 @@ async def justification():
                 })
         return {"analysis": content, "metrics": metrics}
     except Exception as e:
-        logging.error(f"Error al conectar con Claude: {e}")
-        return JSONResponse(content={"error": f"Error al conectar con Claude: {str(e)}"}, status_code=500)
+        logging.error(f"Error al conectar con Claude batch: {e}")
+        return JSONResponse(content={"error": f"Error al conectar con Claude batch: {str(e)}"}, status_code=500)
 
 # Endpoint para obtener visualizaciones (imágenes generadas por Python)
 @app.get("/visualizations/{img_name}")
