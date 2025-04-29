@@ -133,6 +133,7 @@ async def generate_portfolio(request: Request):
     # Distribuir monto: intentar que todos tengan al menos 1 unidad si el monto lo permite
     ALPHAVANTAGE_API_KEY = os.getenv("ALPHAVANTAGE_API_KEY")
     precios = {}
+    warnings = []
     for a in filtered:
         ticker = a["ticker"]
         if ticker != "T-BILL":
@@ -140,10 +141,19 @@ async def generate_portfolio(request: Request):
                 url = f"https://www.alphavantage.co/query?function=GLOBAL_QUOTE&symbol={ticker}&apikey={ALPHAVANTAGE_API_KEY}"
                 resp = requests.get(url)
                 data = resp.json()
-                price_str = data.get("Global Quote", {}).get("05. price", None)
-                precios[ticker] = float(price_str) if price_str else None
+                if "Note" in data:
+                    warnings.append(f"Alpha Vantage API limit reached. Please wait or use another API key.")
+                    precios[ticker] = None
+                else:
+                    price_str = data.get("Global Quote", {}).get("05. price", None)
+                    if price_str:
+                        precios[ticker] = float(price_str)
+                    else:
+                        precios[ticker] = None
+                        warnings.append(f"No se pudo obtener el precio de {ticker}.")
             except Exception as e:
                 precios[ticker] = None
+                warnings.append(f"Error obteniendo precio de {ticker}: {e}")
         else:
             precios[ticker] = None
     # Cálculo de cantidades e inversión total
@@ -160,13 +170,11 @@ async def generate_portfolio(request: Request):
         cantidad = 0
         inversion = 0
         if ticker != "T-BILL" and price:
-            # Si el monto asignado alcanza para 1 unidad, asigna al menos 1
             if monto_asignado >= price:
                 cantidad = int(monto_asignado // price)
                 inversion = round(cantidad * price, 2)
                 monto_restante -= inversion
             else:
-                # Si el monto total restante alcanza para al menos 1, asigna 1
                 if monto_restante >= price:
                     cantidad = 1
                     inversion = round(price, 2)
@@ -182,7 +190,7 @@ async def generate_portfolio(request: Request):
             "sector": sector,
             "peso": round(peso*100, 2),
             "tipo": tipo,
-            "price": price,
+            "price": price if price is not None else "No disponible",
             "cantidad": cantidad,
             "inversion": inversion if inversion > 0 else round(monto_asignado, 2),
             "recomendacion": "Comprar" if tipo in ["Acción", "ETF"] else "Mantener",
@@ -191,7 +199,10 @@ async def generate_portfolio(request: Request):
     global last_portfolio
     last_portfolio = {"portfolio": portfolio, "amount": amount, "params": params}
     logging.info(f"Portafolio generado: {portfolio}")
-    return {"status": "ok"}
+    result = {"status": "ok"}
+    if warnings:
+        result["warnings"] = warnings
+    return result
 
 # Endpoint para obtener el portafolio generado
 @app.get("/portfolio")
@@ -205,51 +216,39 @@ def get_portfolio():
 async def justification():
     import os
     import requests
-    # Usar el último portafolio generado
     global last_portfolio
     if not last_portfolio or "portfolio" not in last_portfolio:
         return JSONResponse(content={"error": "Primero genera un portafolio."}, status_code=400)
     portfolio = last_portfolio["portfolio"]
     tickers = [a["ticker"] for a in portfolio if a["tipo"] in ["Acción", "ETF"]]
-    # Preparar prompt para Claude
     prompt = (
         "Eres un analista de inversiones. Explica de manera detallada por qué las siguientes acciones y ETFs fueron seleccionados para el portafolio de un inversionista considerando su sector, peso, métricas clave y contexto de mercado. Hazlo en español y sé específico para cada ticker: " + ", ".join(tickers)
     )
     CLAUDE_API_KEY = os.getenv("CLAUDE_API_KEY")
-    url = "https://api.anthropic.com/v1/messages/batches"
+    url = "https://api.anthropic.com/v1/messages"
     headers = {
         "x-api-key": CLAUDE_API_KEY,
         "anthropic-version": "2023-06-01",
-        "anthropic-beta": "message-batches-2024-09-24",
         "content-type": "application/json"
     }
-    batch_data = {
-        "requests": [
-            {
-                "custom_id": "portfolio-analysis",
-                "params": {
-                    "model": "claude-3-7-sonnet-20250219",
-                    "max_tokens": 1024,
-                    "temperature": 0.7,
-                    "messages": [
-                        {"role": "user", "content": prompt}
-                    ]
-                }
-            }
+    data = {
+        "model": "claude-3-7-sonnet-20250219",
+        "max_tokens": 1024,
+        "temperature": 0.7,
+        "messages": [
+            {"role": "user", "content": prompt}
         ]
     }
     try:
-        resp = requests.post(url, headers=headers, json=batch_data, timeout=60)
+        resp = requests.post(url, headers=headers, json=data, timeout=60)
         resp.raise_for_status()
         result = resp.json()
-        # Extraer el análisis del batch
+        # Extraer el análisis del response
         content = ""
-        if "responses" in result and result["responses"]:
-            response = result["responses"][0]
-            if "content" in response and response["content"]:
-                content = response["content"][0]["text"]
+        if "content" in result and result["content"]:
+            content = result["content"][0]["text"]
         if not content or len(content.strip()) < 10:
-            logging.error(f"Claude batch devolvió respuesta vacía: {result}")
+            logging.error(f"Claude devolvió respuesta vacía: {result}")
             return JSONResponse(content={"error": "Claude no devolvió un análisis válido."}, status_code=500)
         # Preparar métricas para la tabla comparativa
         metrics = []
@@ -267,8 +266,8 @@ async def justification():
                 })
         return {"analysis": content, "metrics": metrics}
     except Exception as e:
-        logging.error(f"Error al conectar con Claude batch: {e}")
-        return JSONResponse(content={"error": f"Error al conectar con Claude batch: {str(e)}"}, status_code=500)
+        logging.error(f"Error al conectar con Claude: {e}")
+        return JSONResponse(content={"error": f"Error al conectar con Claude: {str(e)}"}, status_code=500)
 
 # Endpoint para obtener visualizaciones (imágenes generadas por Python)
 @app.get("/visualizations/{img_name}")
