@@ -202,25 +202,17 @@ def get_portfolio():
 
 # Endpoint para obtener la justificación (DeepSeek API)
 @app.get("/justification")
-def get_justification():
+async def justification():
+    # Usar el último portafolio generado
     global last_portfolio
-    if not last_portfolio:
-        return JSONResponse(content={"error": "No se ha generado un portafolio aún."}, status_code=404)
+    if not last_portfolio or "portfolio" not in last_portfolio:
+        return JSONResponse(content={"error": "Primero genera un portafolio."}, status_code=400)
     portfolio = last_portfolio["portfolio"]
-    params = last_portfolio["params"]
-    # Solo acciones y ETFs para análisis
-    activos_analisis = [a for a in portfolio if a["tipo"] in ["Acción", "ETF"]]
-    if not activos_analisis:
-        return JSONResponse(content={"error": "No hay acciones ni ETFs para analizar."}, status_code=400)
+    tickers = [a["ticker"] for a in portfolio if a["tipo"] in ["Acción", "ETF"]]
+    # Preparar prompt para DeepSeek
     prompt = (
-        "Eres un analista de inversiones. Explica de manera detallada por qué las siguientes acciones y ETFs fueron seleccionados para el portafolio de un inversionista, "
-        "basado en los principios del Value Investing (ventaja competitiva, calidad, margen de seguridad, diversificación, horizonte). "
-        "Incluye un análisis de las métricas clave para cada activo y cómo se relacionan con el perfil y monto del usuario.\n\n"
-        f"Parámetros del usuario: {json.dumps(params, ensure_ascii=False)}\n"
-        f"Portafolio generado: {json.dumps(activos_analisis, ensure_ascii=False)}\n"
-        "Responde en español."
+        "Eres un analista de inversiones. Explica de manera detallada por qué las siguientes acciones y ETFs fueron seleccionados para el portafolio de un inversionista considerando su sector, peso, métricas clave y contexto de mercado. Hazlo en español y sé específico para cada ticker: " + ", ".join(tickers)
     )
-    DEEPSEEK_API_KEY = os.getenv("DEEPSEEK_API_KEY")
     url = "https://api.deepseek.com/v1/chat/completions"
     headers = {
         "Authorization": f"Bearer {DEEPSEEK_API_KEY}",
