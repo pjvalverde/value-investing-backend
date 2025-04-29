@@ -50,6 +50,8 @@ METRICAS = {
     "T-BILL": {"ROE": None, "P/E": None, "Margen de Beneficio": None, "Ratio de Deuda": None, "Crecimiento de FCF": None, "Moat Cualitativo": None},
 }
 
+logging.basicConfig(level=logging.INFO)
+
 # Endpoint para generar el portafolio
 @app.post("/generate_portfolio")
 async def generate_portfolio(request: Request):
@@ -58,25 +60,40 @@ async def generate_portfolio(request: Request):
     horizon = params.get("horizon", "largo")
     include_tbills = params.get("includeTBills", False)
     sectors = params.get("sectors", [])
-    # Lógica de selección según monto
+    logging.info(f"Generando portafolio para monto: {amount}, sectores: {sectors}, T-Bills: {include_tbills}")
+    # Lógica de selección mejorada
     filtered = []
+    # Siempre incluir ETFs para diversificación
+    etfs = [a for a in UNIVERSE if a["tipo"] == "ETF"]
+    acciones = [a for a in UNIVERSE if a["tipo"] == "Acción" and (not sectors or a["sector"] in sectors)]
     if amount < 2000:
-        # Prioriza ETFs y T-Bills
-        filtered = [a for a in UNIVERSE if (a["tipo"] == "ETF" and (not sectors or a["sector"] in sectors))]
+        filtered = etfs.copy()
+        if acciones and len(filtered) < 2:
+            filtered += acciones[:2 - len(filtered)]
         if include_tbills:
             filtered.append(next(a for a in UNIVERSE if a["ticker"] == "T-BILL"))
     else:
-        # Prioriza acciones, luego ETFs si hay poco sector seleccionado
-        filtered = [a for a in UNIVERSE if (a["sector"] in sectors and a["tipo"] == "Acción")]
+        filtered = acciones.copy()
         if len(filtered) < 2:
-            filtered += [a for a in UNIVERSE if a["tipo"] == "ETF"]
+            filtered += etfs
+        else:
+            filtered += [etf for etf in etfs if etf not in filtered]
         if include_tbills:
             filtered.append(next(a for a in UNIVERSE if a["ticker"] == "T-BILL"))
-    # Simulación de asignación de pesos
+    # Eliminar duplicados
+    tickers_seen = set()
+    filtered_unique = []
+    for a in filtered:
+        if a["ticker"] not in tickers_seen:
+            filtered_unique.append(a)
+            tickers_seen.add(a["ticker"])
+    filtered = filtered_unique
     n = len(filtered)
-    weights = {}
     if n == 0:
+        logging.error("No hay activos en los sectores seleccionados.")
         return JSONResponse(content={"error": "No hay activos en los sectores seleccionados."}, status_code=400)
+    # Pesos según horizonte y T-Bills
+    weights = {}
     if include_tbills and any(a["ticker"] == "T-BILL" for a in filtered):
         if horizon == "corto":
             for a in filtered:
@@ -107,13 +124,16 @@ async def generate_portfolio(request: Request):
                 url = f"https://www.alphavantage.co/query?function=GLOBAL_QUOTE&symbol={ticker}&apikey={ALPHAVANTAGE_API_KEY}"
                 resp = requests.get(url)
                 data = resp.json()
-                price = float(data.get("Global Quote", {}).get("05. price", 0))
-                cantidad = int((amount * weights[ticker]) // price) if price > 0 else 0
-                inversion = round(cantidad * price, 2)
-            except Exception:
+                price_str = data.get("Global Quote", {}).get("05. price", None)
+                if price_str is None:
+                    logging.error(f"Alpha Vantage no devolvió precio para {ticker}: {data}")
+                price = float(price_str) if price_str else None
+                cantidad = int((amount * weights[ticker]) // price) if price and price > 0 else 0
+                inversion = round(cantidad * price, 2) if price else 0
+            except Exception as e:
+                logging.error(f"Error obteniendo precio para {ticker}: {e}")
                 price = None
         else:
-            # Simulación: T-BILL, asigna todo el peso restante
             inversion = round(amount * weights[ticker], 2)
         portfolio.append({
             "ticker": ticker,
@@ -126,9 +146,9 @@ async def generate_portfolio(request: Request):
             "recomendacion": "Comprar" if tipo in ["Acción", "ETF"] else "Mantener",
             **metricas
         })
-    # Guardar en memoria temporal (simulación por usuario único)
     global last_portfolio
     last_portfolio = {"portfolio": portfolio, "amount": amount, "params": params}
+    logging.info(f"Portafolio generado: {portfolio}")
     return {"status": "ok"}
 
 # Endpoint para obtener el portafolio generado
@@ -146,17 +166,18 @@ def get_justification():
         return JSONResponse(content={"error": "No se ha generado un portafolio aún."}, status_code=404)
     portfolio = last_portfolio["portfolio"]
     params = last_portfolio["params"]
-    # Construir prompt para DeepSeek
+    # Solo acciones y ETFs para análisis
+    activos_analisis = [a for a in portfolio if a["tipo"] in ["Acción", "ETF"]]
+    if not activos_analisis:
+        return JSONResponse(content={"error": "No hay acciones ni ETFs para analizar."}, status_code=400)
     prompt = (
-        "Eres un analista de inversiones. Explica de manera detallada y didáctica por qué las siguientes acciones y bonos fueron seleccionados para el portafolio de un inversionista, "
+        "Eres un analista de inversiones. Explica de manera detallada por qué las siguientes acciones y ETFs fueron seleccionados para el portafolio de un inversionista, "
         "basado en los principios del Value Investing (ventaja competitiva, calidad, margen de seguridad, diversificación, horizonte). "
-        "Incluye un análisis de las métricas clave para cada activo y cómo se relacionan con el perfil del usuario.\n\n"
+        "Incluye un análisis de las métricas clave para cada activo y cómo se relacionan con el perfil y monto del usuario.\n\n"
         f"Parámetros del usuario: {json.dumps(params, ensure_ascii=False)}\n"
-        f"Portafolio generado: {json.dumps(portfolio, ensure_ascii=False)}\n"
+        f"Portafolio generado: {json.dumps(activos_analisis, ensure_ascii=False)}\n"
         "Responde en español."
     )
-    # Llamar DeepSeek API
-    import os, requests
     DEEPSEEK_API_KEY = os.getenv("DEEPSEEK_API_KEY")
     url = "https://api.deepseek.com/v1/chat/completions"
     headers = {
@@ -177,8 +198,12 @@ def get_justification():
         resp.raise_for_status()
         result = resp.json()
         content = result["choices"][0]["message"]["content"]
+        if not content or len(content.strip()) < 10:
+            logging.error(f"DeepSeek devolvió respuesta vacía: {result}")
+            return JSONResponse(content={"error": "DeepSeek no devolvió un análisis válido."}, status_code=500)
         return {"html": content}
     except Exception as e:
+        logging.error(f"Error al conectar con DeepSeek: {e}")
         return JSONResponse(content={"error": f"Error al conectar con DeepSeek: {str(e)}"}, status_code=500)
 
 # Endpoint para obtener visualizaciones (imágenes generadas por Python)
