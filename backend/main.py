@@ -253,10 +253,9 @@ async def justification():
                     "moat": a.get("moat", None)
                 })
         return {"analysis": content, "metrics": metrics}
-        return {"html": content}
     except Exception as e:
-        logging.error(f"Error al conectar con DeepSeek: {e}")
-        return JSONResponse(content={"error": f"Error al conectar con DeepSeek: {str(e)}"}, status_code=500)
+        logging.error(f"Error al conectar con Claude: {e}")
+        return JSONResponse(content={"error": f"Error al conectar con Claude: {str(e)}"}, status_code=500)
 
 # Endpoint para obtener visualizaciones (imágenes generadas por Python)
 @app.get("/visualizations/{img_name}")
