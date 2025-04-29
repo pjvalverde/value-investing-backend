@@ -54,6 +54,29 @@ METRICAS = {
 logging.basicConfig(level=logging.INFO)
 
 # Endpoint para generar el portafolio
+@app.post("/historical_prices")
+async def historical_prices(request: Request):
+    params = await request.json()
+    tickers = params.get("tickers", [])
+    ALPHAVANTAGE_API_KEY = os.getenv("ALPHAVANTAGE_API_KEY")
+    results = {}
+    for ticker in tickers:
+        try:
+            url = f"https://www.alphavantage.co/query?function=TIME_SERIES_MONTHLY&symbol={ticker}&apikey={ALPHAVANTAGE_API_KEY}"
+            resp = requests.get(url)
+            data = resp.json()
+            series = data.get("Monthly Time Series", {})
+            # Tomar los últimos 60 meses (5 años)
+            prices = [
+                {"date": k, "close": float(v["4. close"])}
+                for k, v in sorted(series.items(), reverse=False)[-60:]
+            ]
+            results[ticker] = prices
+        except Exception as e:
+            logging.error(f"Error obteniendo históricos para {ticker}: {e}")
+            results[ticker] = []
+    return {"historical": results}
+
 @app.post("/generate_portfolio")
 async def generate_portfolio(request: Request):
     params = await request.json()
@@ -64,7 +87,6 @@ async def generate_portfolio(request: Request):
     logging.info(f"Generando portafolio para monto: {amount}, sectores: {sectors}, T-Bills: {include_tbills}")
     # Lógica de selección mejorada
     filtered = []
-    # Siempre incluir ETFs para diversificación
     etfs = [a for a in UNIVERSE if a["tipo"] == "ETF"]
     acciones = [a for a in UNIVERSE if a["tipo"] == "Acción" and (not sectors or a["sector"] in sectors)]
     if amount < 2000:
@@ -108,42 +130,61 @@ async def generate_portfolio(request: Request):
     else:
         for a in filtered:
             weights[a["ticker"]] = 1.0/n
-    # Construir portafolio con precios y cantidades
-    portfolio = []
+    # Distribuir monto: intentar que todos tengan al menos 1 unidad si el monto lo permite
     ALPHAVANTAGE_API_KEY = os.getenv("ALPHAVANTAGE_API_KEY")
+    precios = {}
     for a in filtered:
         ticker = a["ticker"]
-        peso = round(weights[ticker]*100, 2)
-        tipo = a["tipo"]
-        sector = a["sector"]
-        metricas = METRICAS.get(ticker, {})
-        price = None
-        cantidad = 0
-        inversion = 0
         if ticker != "T-BILL":
             try:
                 url = f"https://www.alphavantage.co/query?function=GLOBAL_QUOTE&symbol={ticker}&apikey={ALPHAVANTAGE_API_KEY}"
                 resp = requests.get(url)
                 data = resp.json()
                 price_str = data.get("Global Quote", {}).get("05. price", None)
-                if price_str is None:
-                    logging.error(f"Alpha Vantage no devolvió precio para {ticker}: {data}")
-                price = float(price_str) if price_str else None
-                cantidad = int((amount * weights[ticker]) // price) if price and price > 0 else 0
-                inversion = round(cantidad * price, 2) if price else 0
+                precios[ticker] = float(price_str) if price_str else None
             except Exception as e:
-                logging.error(f"Error obteniendo precio para {ticker}: {e}")
-                price = None
+                precios[ticker] = None
         else:
-            inversion = round(amount * weights[ticker], 2)
+            precios[ticker] = None
+    # Cálculo de cantidades e inversión total
+    portfolio = []
+    monto_restante = amount
+    for a in filtered:
+        ticker = a["ticker"]
+        peso = weights[ticker]
+        tipo = a["tipo"]
+        sector = a["sector"]
+        metricas = METRICAS.get(ticker, {})
+        price = precios[ticker]
+        monto_asignado = amount * peso
+        cantidad = 0
+        inversion = 0
+        if ticker != "T-BILL" and price:
+            # Si el monto asignado alcanza para 1 unidad, asigna al menos 1
+            if monto_asignado >= price:
+                cantidad = int(monto_asignado // price)
+                inversion = round(cantidad * price, 2)
+                monto_restante -= inversion
+            else:
+                # Si el monto total restante alcanza para al menos 1, asigna 1
+                if monto_restante >= price:
+                    cantidad = 1
+                    inversion = round(price, 2)
+                    monto_restante -= price
+                else:
+                    cantidad = 0
+                    inversion = 0
+        elif ticker == "T-BILL":
+            inversion = round(monto_restante, 2) if a == filtered[-1] else round(monto_asignado, 2)
+            monto_restante -= inversion
         portfolio.append({
             "ticker": ticker,
             "sector": sector,
-            "peso": peso,
+            "peso": round(peso*100, 2),
             "tipo": tipo,
             "price": price,
             "cantidad": cantidad,
-            "inversion": inversion,
+            "inversion": inversion if inversion > 0 else round(monto_asignado, 2),
             "recomendacion": "Comprar" if tipo in ["Acción", "ETF"] else "Mantener",
             **metricas
         })
