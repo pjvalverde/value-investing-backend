@@ -114,8 +114,29 @@ async def generate_portfolio(request: Request):
     portfolio = []
     warnings = []
     
+    # Obtener ETFs seleccionados por el usuario
+    selected_etfs = params.get("etfs", [])
+    
     # Filtrar por sectores seleccionados
     filtered_universe = [item for item in UNIVERSE if item["sector"] in sectors or not sectors]
+    
+    # Agregar ETFs específicos seleccionados por el usuario
+    if selected_etfs:
+        # Filtrar los ETFs que ya están en el universo filtrado
+        existing_tickers = [item["ticker"] for item in filtered_universe]
+        
+        # Agregar los ETFs seleccionados que no estén ya en el universo
+        for etf in selected_etfs:
+            if etf not in existing_tickers:
+                # Buscar el ETF en el universo completo
+                etf_item = next((item for item in UNIVERSE if item["ticker"] == etf), None)
+                
+                # Si no existe en el universo, agregarlo como nuevo ETF
+                if not etf_item:
+                    etf_item = {"ticker": etf, "sector": "ETF", "tipo": "ETF"}
+                    
+                filtered_universe.append(etf_item)
+                logging.info(f"ETF específico agregado: {etf}")
     
     # Incluir T-Bills si se solicita
     if include_tbills:
@@ -165,11 +186,36 @@ async def generate_portfolio(request: Request):
             continue
         
         # Determinar cuántos activos seleccionar
-        num_assets = min(len(tipo_assets), 3 if tipo == "Acción" else 2 if tipo == "ETF" else 1)
+        num_assets = min(len(tipo_assets), 3 if tipo == "Acción" else 3 if tipo == "ETF" else 1)
         
-        # Seleccionar aleatoriamente (en producción, usar criterios de value investing)
-        import random
-        selected = random.sample(tipo_assets, num_assets)
+        # Para ETFs, dar prioridad a los seleccionados por el usuario
+        if tipo == "ETF" and selected_etfs:
+            # Filtrar ETFs seleccionados por el usuario que estén en tipo_assets
+            user_selected_etfs = [item for item in tipo_assets if item["ticker"] in selected_etfs]
+            
+            # Si hay ETFs seleccionados por el usuario, usarlos primero
+            if user_selected_etfs:
+                # Si hay suficientes ETFs seleccionados, usar solo esos
+                if len(user_selected_etfs) >= num_assets:
+                    selected = user_selected_etfs[:num_assets]
+                # Si no hay suficientes, usar los seleccionados y completar con aleatorios
+                else:
+                    remaining = [item for item in tipo_assets if item not in user_selected_etfs]
+                    remaining_needed = num_assets - len(user_selected_etfs)
+                    
+                    if remaining and remaining_needed > 0:
+                        import random
+                        selected = user_selected_etfs + random.sample(remaining, min(remaining_needed, len(remaining)))
+                    else:
+                        selected = user_selected_etfs
+            # Si no hay ETFs seleccionados por el usuario en tipo_assets, seleccionar aleatoriamente
+            else:
+                import random
+                selected = random.sample(tipo_assets, num_assets)
+        # Para otros tipos de activos, seleccionar aleatoriamente
+        else:
+            import random
+            selected = random.sample(tipo_assets, num_assets)
         
         # Distribuir el monto equitativamente
         asset_amount = tipo_amount / len(selected)
