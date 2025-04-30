@@ -455,7 +455,7 @@ async def get_comparative_data(tickers: str):
                         "company": data.get("Name", ticker),
                         "ROE": float(data.get("ReturnOnEquityTTM", "0")) * 100 if data.get("ReturnOnEquityTTM") else None,
                         "P/E": float(data.get("PERatio", "0")) if data.get("PERatio") else None,
-                        "Margen de Beneficio": f"{float(data.get("ProfitMargin", "0")) * 100:.1f}%" if data.get("ProfitMargin") else None,
+                        "Margen de Beneficio": f"{float(data.get('ProfitMargin', '0')) * 100:.1f}%" if data.get("ProfitMargin") else None,
                         "Ratio de Deuda": data.get("DebtToEquityRatio", None),
                         "Crecimiento de FCF": None,  # No disponible directamente en Alpha Vantage
                         "Moat Cualitativo": None  # Requiere análisis cualitativo
