@@ -111,91 +111,120 @@ async def generate_portfolio(request: Request):
             filtered_unique.append(a)
             tickers_seen.add(a["ticker"])
     filtered = filtered_unique
-    n = len(filtered)
-    if n == 0:
-        logging.error("No hay activos en los sectores seleccionados.")
-        return JSONResponse(content={"error": "No hay activos en los sectores seleccionados."}, status_code=400)
-    # Pesos según horizonte y T-Bills
-    weights = {}
-    if include_tbills and any(a["ticker"] == "T-BILL" for a in filtered):
-        if horizon == "corto":
-            for a in filtered:
-                weights[a["ticker"]] = 0.3 if a["ticker"] == "T-BILL" else (0.7/(n-1) if n > 1 else 0.0)
-        elif horizon == "intermedio":
-            for a in filtered:
-                weights[a["ticker"]] = 0.15 if a["ticker"] == "T-BILL" else (0.85/(n-1) if n > 1 else 0.0)
-        else:
-            for a in filtered:
-                weights[a["ticker"]] = 1.0/n
-    else:
-        for a in filtered:
-            weights[a["ticker"]] = 1.0/n
-    # Distribuir monto: intentar que todos tengan al menos 1 unidad si el monto lo permite
-    ALPHAVANTAGE_API_KEY = os.getenv("ALPHAVANTAGE_API_KEY")
-    precios = {}
-    warnings = []
-    for a in filtered:
-        ticker = a["ticker"]
-        if ticker != "T-BILL":
-            try:
-                url = f"https://www.alphavantage.co/query?function=GLOBAL_QUOTE&symbol={ticker}&apikey={ALPHAVANTAGE_API_KEY}"
-                resp = requests.get(url)
-                data = resp.json()
-                if "Note" in data:
-                    warnings.append(f"Alpha Vantage API limit reached. Please wait or use another API key.")
-                    precios[ticker] = None
-                else:
-                    price_str = data.get("Global Quote", {}).get("05. price", None)
-                    if price_str:
-                        precios[ticker] = float(price_str)
-                    else:
-                        precios[ticker] = None
-                        warnings.append(f"No se pudo obtener el precio de {ticker}.")
-            except Exception as e:
-                precios[ticker] = None
-                warnings.append(f"Error obteniendo precio de {ticker}: {e}")
-        else:
-            precios[ticker] = None
-    # Cálculo de cantidades e inversión total
     portfolio = []
-    monto_restante = amount
-    for a in filtered:
-        ticker = a["ticker"]
-        peso = weights[ticker]
-        tipo = a["tipo"]
-        sector = a["sector"]
-        metricas = METRICAS.get(ticker, {})
-        price = precios[ticker]
-        monto_asignado = amount * peso
-        cantidad = 0
-        inversion = 0
-        if ticker != "T-BILL" and price:
-            if monto_asignado >= price:
-                cantidad = int(monto_asignado // price)
-                inversion = round(cantidad * price, 2)
-                monto_restante -= inversion
-            else:
-                if monto_restante >= price:
-                    cantidad = 1
-                    inversion = round(price, 2)
-                    monto_restante -= price
+    warnings = []
+    
+    # Filtrar por sectores seleccionados
+    filtered_universe = [item for item in UNIVERSE if item["sector"] in sectors or not sectors]
+    
+    # Incluir T-Bills si se solicita
+    if include_tbills:
+        tbills = [item for item in UNIVERSE if item["tipo"] == "Bono"]
+        if tbills:
+            filtered_universe.extend(tbills)
+    
+    # Si no hay suficientes opciones, advertir
+    if len(filtered_universe) < 3:
+        warnings.append("No hay suficientes opciones disponibles para los sectores seleccionados.")
+        # Añadir algunas opciones adicionales
+        additional = [item for item in UNIVERSE if item not in filtered_universe][:3]
+        filtered_universe.extend(additional)
+    
+    # Distribuir el monto según el horizonte y tipo de activos
+    if horizon == "corto":
+        # Corto plazo: más conservador, más bonos
+        weights = {"Acción": 0.3, "ETF": 0.3, "Bono": 0.4}
+    elif horizon == "intermedio":
+        # Intermedio: balanceado
+        weights = {"Acción": 0.4, "ETF": 0.4, "Bono": 0.2}
+    else:  # largo
+        # Largo plazo: más agresivo, más acciones
+        weights = {"Acción": 0.5, "ETF": 0.4, "Bono": 0.1}
+    
+    # Si no se incluyen bonos, redistribuir
+    if not include_tbills:
+        weights["Acción"] += weights["Bono"] / 2
+        weights["ETF"] += weights["Bono"] / 2
+        weights["Bono"] = 0
+    
+    # Calcular montos por tipo de activo
+    amounts = {tipo: amount * weight for tipo, weight in weights.items()}
+    
+    # Obtener API key de Alpha Vantage
+    ALPHAVANTAGE_API_KEY = os.getenv("ALPHAVANTAGE_API_KEY")
+    
+    # Seleccionar activos por tipo
+    for tipo, tipo_amount in amounts.items():
+        if tipo_amount <= 0:
+            continue
+        
+        # Filtrar por tipo
+        tipo_assets = [item for item in filtered_universe if item["tipo"] == tipo]
+        
+        if not tipo_assets:
+            continue
+        
+        # Determinar cuántos activos seleccionar
+        num_assets = min(len(tipo_assets), 3 if tipo == "Acción" else 2 if tipo == "ETF" else 1)
+        
+        # Seleccionar aleatoriamente (en producción, usar criterios de value investing)
+        import random
+        selected = random.sample(tipo_assets, num_assets)
+        
+        # Distribuir el monto equitativamente
+        asset_amount = tipo_amount / len(selected)
+        
+        for asset in selected:
+            # Intentar obtener precio real de Alpha Vantage
+            price = None
+            if ALPHAVANTAGE_API_KEY and asset["ticker"] != "T-BILL":
+                try:
+                    url = f"https://www.alphavantage.co/query?function=GLOBAL_QUOTE&symbol={asset['ticker']}&apikey={ALPHAVANTAGE_API_KEY}"
+                    resp = requests.get(url, timeout=10)
+                    data = resp.json()
+                    
+                    if "Global Quote" in data and "05. price" in data["Global Quote"]:
+                        price = float(data["Global Quote"]["05. price"])
+                        logging.info(f"Precio real obtenido para {asset['ticker']}: ${price}")
+                except Exception as e:
+                    logging.error(f"Error al obtener precio para {asset['ticker']}: {e}")
+                    warnings.append(f"No se pudo obtener el precio de {asset['ticker']}.")
+            
+            # Si no se pudo obtener el precio real, usar simulación
+            if price is None:
+                if asset["ticker"] == "T-BILL":
+                    price = 100  # Precio fijo para T-Bills
                 else:
-                    cantidad = 0
-                    inversion = 0
-        elif ticker == "T-BILL":
-            inversion = round(monto_restante, 2) if a == filtered[-1] else round(monto_asignado, 2)
-            monto_restante -= inversion
-        portfolio.append({
-            "ticker": ticker,
-            "sector": sector,
-            "peso": round(peso*100, 2),
-            "tipo": tipo,
-            "price": price if price is not None else "No disponible",
-            "cantidad": cantidad,
-            "inversion": inversion if inversion > 0 else round(monto_asignado, 2),
-            "recomendacion": "Comprar" if tipo in ["Acción", "ETF"] else "Mantener",
-            **metricas
-        })
+                    price = random.uniform(50, 500)  # Precio entre $50 y $500
+                    warnings.append(f"No se pudo obtener el precio de {asset['ticker']}.")
+            
+            cantidad = asset_amount / price
+            
+            # Añadir al portafolio
+            portfolio_item = {
+                "ticker": asset["ticker"],
+                "sector": asset["sector"],
+                "tipo": asset["tipo"],
+                "peso": round(asset_amount / amount * 100, 2),
+                "price": round(price, 2),
+                "cantidad": round(cantidad, 2),
+                "inversion": round(asset_amount, 2),
+                "recomendacion": "Comprar"
+            }
+            
+            # Añadir métricas de value investing si están disponibles
+            if asset["ticker"] in METRICAS:
+                metrics = METRICAS[asset["ticker"]]
+                portfolio_item.update({
+                    "ROE": metrics["ROE"],
+                    "PE": metrics["P/E"],
+                    "margen_beneficio": metrics["Margen de Beneficio"],
+                    "ratio_deuda": metrics["Ratio de Deuda"],
+                    "crecimiento_fcf": metrics["Crecimiento de FCF"],
+                    "moat": metrics["Moat Cualitativo"]
+                })
+            
+            portfolio.append(portfolio_item)
     global last_portfolio
     last_portfolio = {"portfolio": portfolio, "amount": amount, "params": params}
     logging.info(f"Portafolio generado: {portfolio}")
@@ -337,6 +366,32 @@ def get_visualization(img_name: str):
     if not os.path.exists(img_path):
         return JSONResponse(content={"error": "Visualization not found"}, status_code=404)
     return FileResponse(img_path)
+
+@app.get("/real_time_price")
+async def real_time_price(ticker: str):
+    ALPHAVANTAGE_API_KEY = os.getenv("ALPHAVANTAGE_API_KEY")
+    if not ALPHAVANTAGE_API_KEY:
+        return JSONResponse(content={"error": "Alpha Vantage API key no configurada"}, status_code=500)
+    
+    try:
+        url = f"https://www.alphavantage.co/query?function=GLOBAL_QUOTE&symbol={ticker}&apikey={ALPHAVANTAGE_API_KEY}"
+        resp = requests.get(url, timeout=10)
+        resp.raise_for_status()
+        data = resp.json()
+        
+        if "Global Quote" in data and "05. price" in data["Global Quote"]:
+            price = float(data["Global Quote"]["05. price"])
+            return {"ticker": ticker, "price": price}
+        else:
+            # Simulación de precio si Alpha Vantage no responde correctamente
+            # En producción, podrías intentar con otra API o mostrar un error
+            import random
+            simulated_price = random.uniform(50, 500)  # Precio simulado entre 50 y 500
+            logging.warning(f"Usando precio simulado para {ticker}: {simulated_price}")
+            return {"ticker": ticker, "price": round(simulated_price, 2), "simulated": True}
+    except Exception as e:
+        logging.error(f"Error al obtener precio en tiempo real para {ticker}: {e}")
+        return JSONResponse(content={"error": f"Error al obtener precio: {str(e)}"}, status_code=500)
 
 @app.get("/")
 def root():
