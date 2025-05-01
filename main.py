@@ -1,4 +1,4 @@
-# Aplicaciu00f3n FastAPI completamente independiente sin importaciones externas
+# Aplicación FastAPI completamente independiente para Railway
 import os
 import json
 import random
@@ -17,7 +17,7 @@ logging.basicConfig(
 )
 logger = logging.getLogger("value-investing-api")
 
-# Crear la aplicaciu00f3n FastAPI
+# Crear la aplicación FastAPI
 app = FastAPI(title="Value Investing API", description="API para el sistema de Value Investing")
 
 # Permitir acceso desde el frontend React - Configuración explícita de CORS
@@ -271,6 +271,6 @@ def api_test():
 
 # Ejecutar la aplicación si se llama directamente
 if __name__ == "__main__":
-    port = int(os.environ.get("PORT", 8002))  # Usar puerto 8002 por defecto
+    port = int(os.environ.get("PORT", 8000))
     import uvicorn
     uvicorn.run("main:app", host="0.0.0.0", port=port)
