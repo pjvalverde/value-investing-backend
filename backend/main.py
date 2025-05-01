@@ -9,13 +9,22 @@ from fastapi.responses import JSONResponse
 from pydantic import BaseModel
 from typing import List, Dict, Any, Optional
 from datetime import datetime, timedelta
+
+# Importar modelos
+from models.db import db
+from models.symbols import Symbol
+from models.portfolios import Portfolio
+
+# Importar rutas
+from routes.screener import router as screener_router
+from routes.portfolio import router as portfolio_router
 import pandas as pd
 import markdown
 import os
 import requests
 import json
 
-app = FastAPI()
+app = FastAPI(title="Value Investing API", description="API para el sistema de Value Investing")
 
 # Permitir acceso desde el frontend React
 app.add_middleware(
@@ -25,6 +34,10 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+# Registrar routers
+app.include_router(screener_router, prefix="/api", tags=["screener"])
+app.include_router(portfolio_router, prefix="/api/portfolio", tags=["portfolio"])
 
 DATA_DIR = os.path.join(os.path.dirname(__file__), '..', 'docs')
 RESULTS_DIR = os.path.join(DATA_DIR, 'resultados')

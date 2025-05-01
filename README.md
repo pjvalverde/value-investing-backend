@@ -1,70 +1,122 @@
-# Getting Started with Create React App
+# Value Investing Application
 
-This project was bootstrapped with [Create React App](https://github.com/facebook/create-react-app).
+Una aplicaciu00f3n completa para ayudar a inversionistas a construir portfolios basados en principios de Value Investing y Growth, con optimizaciu00f3n de carteras y anu00e1lisis fundamental.
 
-## Available Scripts
+## Arquitectura de la Aplicaciu00f3n
 
-In the project directory, you can run:
+La aplicaciu00f3n estu00e1 dividida en dos componentes principales:
 
-### `npm start`
+### Backend (FastAPI)
 
-Runs the app in the development mode.\
-Open [http://localhost:3000](http://localhost:3000) to view it in your browser.
+- **Modelos**: Definiciu00f3n de la estructura de datos y lu00f3gica de negocio
+  - `db.py`: Conexiu00f3n a la base de datos PostgreSQL y definiciu00f3n de tablas
+  - `symbols.py`: Modelo para manejar su00edmbolos/acciones y screeners
+  - `portfolios.py`: Modelo para la gestiu00f3n y optimizaciu00f3n de portfolios
 
-The page will reload when you make changes.\
-You may also see any lint errors in the console.
+- **Rutas**: Endpoints de la API
+  - `screener.py`: Endpoints para filtrar acciones por criterios de value y growth
+  - `portfolio.py`: Endpoints para crear, optimizar y analizar portfolios
 
-### `npm test`
+- **Jobs**: Tareas programadas para actualizar datos
+  - `refresh_fundamentals.js`: Actualiza datos fundamentales desde Alpha Vantage
+  - `refresh_prices.js`: Actualiza precios y calcula indicadores de momentum
+  - `recalc_performance.js`: Recalcula el rendimiento de los portfolios
 
-Launches the test runner in the interactive watch mode.\
-See the section about [running tests](https://facebook.github.io/create-react-app/docs/running-tests) for more information.
+### Frontend (React)
 
-### `npm run build`
+- **Componentes Principales**:
+  - Portfolio Tradicional: Permite crear portfolios basados en criterios clu00e1sicos
+  - Portfolio Builder: Interfaz moderna para optimizar carteras segu00fan diferentes estrategias
+  - Screeners: Filtros para encontrar acciones value y growth
+  - Visualizaciones: Gru00e1ficos y tablas para analizar rendimiento
 
-Builds the app for production to the `build` folder.\
-It correctly bundles React in production mode and optimizes the build for the best performance.
+## Funcionalidades Principales
 
-The build is minified and the filenames include the hashes.\
-Your app is ready to be deployed!
+### 1. Screeners de Acciones
 
-See the section about [deployment](https://facebook.github.io/create-react-app/docs/deployment) for more information.
+- **Value Screener**: Filtra acciones basadas en criterios de valor como P/E bajo, P/B bajo, dividendos, etc.
+- **Growth Screener**: Identifica acciones con alto crecimiento de ingresos, buenos mu00e1rgenes y momentum positivo
 
-### `npm run eject`
+### 2. Portfolio Builder
 
-**Note: this is a one-way operation. Once you `eject`, you can't go back!**
+- **Asignaciu00f3n de Activos**: Distribuciu00f3n entre bonos, acciones value y acciones growth
+- **Optimizaciu00f3n de Portfolio**: Utiliza la API de Claude para generar portfolios optimizados
+- **Visualizaciu00f3n de Resultados**: Gru00e1ficos de distribuciu00f3n y tablas de posiciones
 
-If you aren't satisfied with the build tool and configuration choices, you can `eject` at any time. This command will remove the single build dependency from your project.
+### 3. Anu00e1lisis y Seguimiento
 
-Instead, it will copy all the configuration files and the transitive dependencies (webpack, Babel, ESLint, etc) right into your project so you have full control over them. All of the commands except `eject` will still work, but they will point to the copied scripts so you can tweak them. At this point you're on your own.
+- **Comparaciu00f3n con u00cdndices**: Compara el rendimiento con el S&P 500
+- **Anu00e1lisis Fundamental**: Evaluaciu00f3n detallada de cada acciu00f3n en el portfolio
+- **Datos Histu00f3ricos**: Visualizaciu00f3n de rendimiento histu00f3rico
 
-You don't have to ever use `eject`. The curated feature set is suitable for small and middle deployments, and you shouldn't feel obligated to use this feature. However we understand that this tool wouldn't be useful if you couldn't customize it when you are ready for it.
+## Tecnologu00edas Utilizadas
 
-## Learn More
+- **Backend**: FastAPI, PostgreSQL, psycopg2
+- **Frontend**: React, Recharts
+- **APIs Externas**: Alpha Vantage (datos de mercado), Claude (optimizaciu00f3n)
+- **Despliegue**: Railway (backend y jobs programados)
 
-You can learn more in the [Create React App documentation](https://facebook.github.io/create-react-app/docs/getting-started).
+## Instalaciu00f3n y Configuraciu00f3n
 
-To learn React, check out the [React documentation](https://reactjs.org/).
+### Requisitos Previos
 
-### Code Splitting
+- Node.js (v14 o superior)
+- PostgreSQL (v12 o superior)
+- Python (v3.8 o superior)
 
-This section has moved here: [https://facebook.github.io/create-react-app/docs/code-splitting](https://facebook.github.io/create-react-app/docs/code-splitting)
+### Variables de Entorno
 
-### Analyzing the Bundle Size
+Crea un archivo `.env` en la rau00edz del proyecto backend con las siguientes variables:
 
-This section has moved here: [https://facebook.github.io/create-react-app/docs/analyzing-the-bundle-size](https://facebook.github.io/create-react-app/docs/analyzing-the-bundle-size)
+```
+DATABASE_URL=postgresql://usuario:contraseu00f1a@localhost:5432/value_investing
+ALPHAVANTAGE_API_KEY=tu_clave_de_api
+CLAUDE_API_KEY=tu_clave_de_api_claude
+```
 
-### Making a Progressive Web App
+### Instalaciu00f3n del Backend
 
-This section has moved here: [https://facebook.github.io/create-react-app/docs/making-a-progressive-web-app](https://facebook.github.io/create-react-app/docs/making-a-progressive-web-app)
+1. Clona el repositorio
+2. Navega al directorio del backend
+3. Instala las dependencias de Python:
+   ```
+   pip install -r requirements.txt
+   ```
+4. Inicializa la base de datos:
+   ```
+   python -m backend.models.db
+   ```
+5. Inicia el servidor:
+   ```
+   uvicorn backend.main:app --reload
+   ```
 
-### Advanced Configuration
+### Instalaciu00f3n del Frontend
 
-This section has moved here: [https://facebook.github.io/create-react-app/docs/advanced-configuration](https://facebook.github.io/create-react-app/docs/advanced-configuration)
+1. Navega al directorio del frontend
+2. Instala las dependencias:
+   ```
+   npm install
+   ```
+3. Crea un archivo `.env` con:
+   ```
+   REACT_APP_BACKEND_URL=http://localhost:8000
+   ```
+4. Inicia la aplicaciu00f3n:
+   ```
+   npm start
+   ```
 
-### Deployment
+## Despliegue en Railway
 
-This section has moved here: [https://facebook.github.io/create-react-app/docs/deployment](https://facebook.github.io/create-react-app/docs/deployment)
+La aplicaciu00f3n estu00e1 configurada para ser desplegada en Railway con los siguientes servicios:
 
-### `npm run build` fails to minify
+1. **Servicio Backend**: Ejecuta la API FastAPI
+2. **Servicio PostgreSQL**: Base de datos para almacenar informaciu00f3n de portfolios y acciones
+3. **Servicio Jobs**: Ejecuta las tareas programadas para actualizar datos
 
-This section has moved here: [https://facebook.github.io/create-react-app/docs/troubleshooting#npm-run-build-fails-to-minify](https://facebook.github.io/create-react-app/docs/troubleshooting#npm-run-build-fails-to-minify)
+Configura las mismas variables de entorno en Railway que se mencionaron anteriormente.
+
+## Contribuciones
+
+Las contribuciones son bienvenidas. Por favor, abre un issue para discutir los cambios importantes antes de realizar un pull request.
