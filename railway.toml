@@ -1,0 +1,12 @@
+[build]
+  builder = "nixpacks"
+  buildCommand = "echo 'Building the application...'"
+
+[deploy]
+  startCommand = "python app_standalone.py"
+  healthcheckPath = "/"
+  healthcheckTimeout = 100
+  restartPolicyType = "on_failure"
+
+[env]
+  PORT = "8000"
