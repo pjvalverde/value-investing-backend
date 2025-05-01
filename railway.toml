@@ -3,7 +3,7 @@
   buildCommand = "echo 'Building the application...'"
 
 [deploy]
-  startCommand = "python app_standalone.py"
+  startCommand = "python start.py"
   healthcheckPath = "/"
   healthcheckTimeout = 100
   restartPolicyType = "on_failure"
