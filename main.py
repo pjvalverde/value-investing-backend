@@ -271,6 +271,6 @@ def api_test():
 
 # Ejecutar la aplicación si se llama directamente
 if __name__ == "__main__":
-    port = int(os.environ.get("PORT", 8001))  # Usar puerto 8001 por defecto
+    port = int(os.environ.get("PORT", 8002))  # Usar puerto 8002 por defecto
     import uvicorn
     uvicorn.run("main:app", host="0.0.0.0", port=port)
