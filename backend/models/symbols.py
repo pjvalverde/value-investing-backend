@@ -1,4 +1,4 @@
-from backend.models.db import db
+from .db import db
 import logging
 
 class Symbol:
