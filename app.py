@@ -1,5 +1,11 @@
 import os
+import sys
 import uvicorn
+
+# Agregar el directorio actual al path de Python para permitir importaciones absolutas
+sys.path.insert(0, os.path.abspath(os.path.dirname(__file__)))
+
+# Importar FastAPI y componentes necesarios
 from fastapi import FastAPI, Request, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
@@ -16,9 +22,14 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# Importar rutas
-from backend.routes.screener import router as screener_router
-from backend.routes.portfolio import router as portfolio_router
+# Importar directamente desde el directorio actual
+import backend.models.db as db_module
+import backend.routes.screener as screener_module
+import backend.routes.portfolio as portfolio_module
+
+# Obtener los routers
+screener_router = screener_module.router
+portfolio_router = portfolio_module.router
 
 # Registrar routers
 app.include_router(screener_router, prefix="/api", tags=["screener"])
