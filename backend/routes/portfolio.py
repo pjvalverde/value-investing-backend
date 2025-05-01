@@ -1,5 +1,5 @@
 from fastapi import APIRouter, Request, HTTPException
-from models.portfolios import Portfolio
+from backend.models.portfolios import Portfolio
 import logging
 import json
 import uuid

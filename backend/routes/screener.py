@@ -1,5 +1,5 @@
 from fastapi import APIRouter, Query, Request
-from models.symbols import Symbol
+from backend.models.symbols import Symbol
 import logging
 
 router = APIRouter()

@@ -11,13 +11,13 @@ from typing import List, Dict, Any, Optional
 from datetime import datetime, timedelta
 
 # Importar modelos
-from models.db import db
-from models.symbols import Symbol
-from models.portfolios import Portfolio
+from backend.models.db import db
+from backend.models.symbols import Symbol
+from backend.models.portfolios import Portfolio
 
 # Importar rutas
-from routes.screener import router as screener_router
-from routes.portfolio import router as portfolio_router
+from backend.routes.screener import router as screener_router
+from backend.routes.portfolio import router as portfolio_router
 import pandas as pd
 import markdown
 import os
