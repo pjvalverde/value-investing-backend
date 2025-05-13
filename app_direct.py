@@ -98,6 +98,11 @@ async def startup_event():
     
     logger.info("Servicios inicializados correctamente")
 
+# Ruta raiz para healthcheck
+@app.get("/")
+def root():
+    return {"message": "Value Investing API - Versiu00f3n 2.0", "status": "ok"}
+
 # Endpoint para obtener precios en tiempo real
 @app.get("/real_time_price/{ticker}")
 async def real_time_price(ticker: str):
