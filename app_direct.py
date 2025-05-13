@@ -81,8 +81,8 @@ async def startup_event():
     global alpha_vantage_client, chart_service, portfolio_service, claude_service
     
     # Inicializar el cliente de Alpha Vantage
-    alpha_vantage_api_key = os.getenv("ALPHAVANTAGE_API_KEY", "demo")
-    alpha_vantage_client = AlphaVantageClient(api_key=alpha_vantage_api_key)
+    # La clase AlphaVantageClient obtiene la clave API directamente de las variables de entorno
+    alpha_vantage_client = AlphaVantageClient()
     
     # Inicializar el servicio de gru00e1ficos
     chart_service = ChartService(alpha_vantage_client=alpha_vantage_client)
@@ -91,8 +91,8 @@ async def startup_event():
     portfolio_service = PortfolioService(alpha_vantage_client=alpha_vantage_client)
     
     # Inicializar el servicio de Claude
-    claude_api_key = os.getenv("CLAUDE_API_KEY", "")
-    claude_service = ClaudeService(api_key=claude_api_key)
+    # La clase ClaudeService obtiene la clave API directamente de las variables de entorno
+    claude_service = ClaudeService()
     
     logger.info("Servicios inicializados correctamente")
 
