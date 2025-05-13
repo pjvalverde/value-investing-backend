@@ -1,7 +1,9 @@
 #!/bin/bash
 
-# Obtener el puerto de la variable de entorno PORT o usar 8000 como valor predeterminado
-PORT=${PORT:-8000}
+echo "Starting Value Investing API on Railway (simplified version)..."
+echo "Environment variables:"
+echo "PORT: $PORT"
+echo "ALPHAVANTAGE_API_KEY: ${ALPHAVANTAGE_API_KEY:0:3}..."
+echo "CLAUDE_API_KEY: ${CLAUDE_API_KEY:0:3}..."
 
-# Iniciar la aplicación con uvicorn
-exec uvicorn app_direct:app --host 0.0.0.0 --port $PORT
+python app_simple.py

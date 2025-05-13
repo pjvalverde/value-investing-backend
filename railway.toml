@@ -1,12 +1,13 @@
 [build]
   builder = "nixpacks"
-  buildCommand = "echo 'Building the application...'"
+  buildCommand = "pip install -r requirements.txt"
 
 [deploy]
   buildCommand = "pip install -r requirements.txt"
   healthcheckPath = "/test"
   healthcheckTimeout = 100
   restartPolicyType = "on_failure"
+  startCommand = "bash start.sh"
 
 [env]
   PORT = "8000"

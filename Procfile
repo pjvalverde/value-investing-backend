@@ -1,1 +1,1 @@
-web: uvicorn app_direct:app --host 0.0.0.0 --port 8000
+web: python app_railway.py

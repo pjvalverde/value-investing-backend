@@ -1,4 +1,4 @@
-FROM python:3.11-slim
+FROM python:3.9-slim
 
 WORKDIR /app
 
@@ -12,10 +12,10 @@ RUN pip install --no-cache-dir -r requirements.txt
 COPY . .
 
 # Configurar variables de entorno
-ENV PORT=8000
+ENV PORT=${PORT}
 
 # Exponer el puerto
-EXPOSE 8000
+EXPOSE ${PORT}
 
 # Comando para ejecutar la aplicaciu00f3n
-CMD ["uvicorn", "app_direct:app", "--host", "0.0.0.0", "--port", "8000"]
+CMD python app_railway.py
