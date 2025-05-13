@@ -23,7 +23,8 @@ async def root():
     return {
         "message": "Value Investing API - Simplified Version",
         "status": "ok",
-        "version": "1.0.0"
+        "version": "1.0.1",
+        "update": "Latest deployment"
     }
 
 # Health check endpoint
@@ -31,7 +32,8 @@ async def root():
 def test():
     return {
         "status": "ok",
-        "message": "API working correctly"
+        "message": "API working correctly",
+        "version": "1.0.1"
     }
 
 # API test endpoint
@@ -41,7 +43,8 @@ def api_test():
         "status": "ok",
         "data": {
             "app": "Value Investing API",
-            "environment": os.environ.get("ENVIRONMENT", "production")
+            "environment": os.environ.get("ENVIRONMENT", "production"),
+            "deployment": "Latest version with updated configuration"
         }
     }
 
