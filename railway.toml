@@ -3,6 +3,7 @@
   buildCommand = "echo 'Building the application...'"
 
 [deploy]
+  buildCommand = "pip install -r requirements.txt"
   healthcheckPath = "/test"
   healthcheckTimeout = 100
   restartPolicyType = "on_failure"
