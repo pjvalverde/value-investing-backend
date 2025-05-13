@@ -4,7 +4,7 @@
 
 [deploy]
   startCommand = "python app_direct.py"
-  healthcheckPath = "/"
+  healthcheckPath = "/test"
   healthcheckTimeout = 100
   restartPolicyType = "on_failure"
 
