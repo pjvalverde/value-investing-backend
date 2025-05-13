@@ -3,11 +3,11 @@ import json
 import random
 import logging
 import requests
-from fastapi import FastAPI, Request, HTTPException
+from fastapi import FastAPI, Request, HTTPException, Depends
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import JSONResponse
+from fastapi.responses import JSONResponse, FileResponse
 from pydantic import BaseModel
-from typing import List, Dict, Any, Optional
+from typing import List, Dict, Any, Optional, Union
 from datetime import datetime, timedelta
 
 # Importar modelos
@@ -15,14 +15,21 @@ from backend.models.db import db
 from backend.models.symbols import Symbol
 from backend.models.portfolios import Portfolio
 
+# Importar servicios
+from backend.services.alpha_vantage import alpha_vantage_client
+from backend.services.chart_service import chart_service
+from backend.services.portfolio_service import portfolio_service
+from backend.services.claude_service import claude_service
+
 # Importar rutas
 from backend.routes.screener import router as screener_router
 from backend.routes.portfolio import router as portfolio_router
 import pandas as pd
 import markdown
-import os
-import requests
-import json
+
+# Configurar logging
+logging.basicConfig(level=logging.INFO)
+logger = logging.getLogger("value-investing-api")
 
 app = FastAPI(title="Value Investing API", description="API para el sistema de Value Investing")
 
@@ -73,336 +80,143 @@ METRICAS = {
 
 logging.basicConfig(level=logging.INFO)
 
-# Endpoint para generar el portafolio
+# Endpoint para obtener datos históricos de precios para múltiples tickers
 @app.post("/historical_prices")
 async def historical_prices(request: Request):
-    params = await request.json()
-    tickers = params.get("tickers", [])
-    ALPHAVANTAGE_API_KEY = os.getenv("ALPHAVANTAGE_API_KEY")
-    results = {}
-    for ticker in tickers:
-        try:
-            url = f"https://www.alphavantage.co/query?function=TIME_SERIES_MONTHLY&symbol={ticker}&apikey={ALPHAVANTAGE_API_KEY}"
-            resp = requests.get(url)
-            data = resp.json()
-            series = data.get("Monthly Time Series", {})
-            # Tomar los últimos 60 meses (5 años)
-            prices = [
-                {"date": k, "close": float(v["4. close"])}
-                for k, v in sorted(series.items(), reverse=False)[-60:]
-            ]
-            results[ticker] = prices
-        except Exception as e:
-            logging.error(f"Error obteniendo históricos para {ticker}: {e}")
-            results[ticker] = []
-    return {"historical": results}
+    try:
+        params = await request.json()
+        tickers = params.get("tickers", [])
+        period = params.get("period", "5years")
+        results = {}
+        
+        for ticker in tickers:
+            # Usar el servicio de Alpha Vantage para obtener datos históricos
+            historical_data = alpha_vantage_client.get_historical_prices(ticker, period)
+            results[ticker] = historical_data
+            
+        return {"results": results}
+    except Exception as e:
+        logger.error(f"Error getting historical prices: {str(e)}")
+        return JSONResponse(
+            status_code=500,
+            content={"error": f"Error getting historical prices: {str(e)}"}
+        )
 
 @app.post("/generate_portfolio")
 async def generate_portfolio(request: Request):
-    params = await request.json()
-    amount = float(params.get("amount", 0))
-    horizon = params.get("horizon", "largo")
-    include_tbills = params.get("includeTBills", False)
-    sectors = params.get("sectors", [])
-    logging.info(f"Generando portafolio para monto: {amount}, sectores: {sectors}, T-Bills: {include_tbills}")
-    # Lógica de selección mejorada
-    filtered = []
-    etfs = [a for a in UNIVERSE if a["tipo"] == "ETF"]
-    acciones = [a for a in UNIVERSE if a["tipo"] == "Acción" and (not sectors or a["sector"] in sectors)]
-    if amount < 2000:
-        filtered = etfs.copy()
-        if acciones and len(filtered) < 2:
-            filtered += acciones[:2 - len(filtered)]
-        if include_tbills:
-            filtered.append(next(a for a in UNIVERSE if a["ticker"] == "T-BILL"))
-    else:
-        filtered = acciones.copy()
-        if len(filtered) < 2:
-            filtered += etfs
-        else:
-            filtered += [etf for etf in etfs if etf not in filtered]
-        if include_tbills:
-            filtered.append(next(a for a in UNIVERSE if a["ticker"] == "T-BILL"))
-    # Eliminar duplicados
-    tickers_seen = set()
-    filtered_unique = []
-    for a in filtered:
-        if a["ticker"] not in tickers_seen:
-            filtered_unique.append(a)
-            tickers_seen.add(a["ticker"])
-    filtered = filtered_unique
-    portfolio = []
-    warnings = []
-    
-    # Obtener ETFs seleccionados por el usuario
-    selected_etfs = params.get("etfs", [])
-    
-    # Filtrar por sectores seleccionados
-    filtered_universe = [item for item in UNIVERSE if item["sector"] in sectors or not sectors]
-    
-    # Agregar ETFs específicos seleccionados por el usuario
-    if selected_etfs:
-        # Filtrar los ETFs que ya están en el universo filtrado
-        existing_tickers = [item["ticker"] for item in filtered_universe]
-        
-        # Agregar los ETFs seleccionados que no estén ya en el universo
-        for etf in selected_etfs:
-            if etf not in existing_tickers:
-                # Buscar el ETF en el universo completo
-                etf_item = next((item for item in UNIVERSE if item["ticker"] == etf), None)
-                
-                # Si no existe en el universo, agregarlo como nuevo ETF
-                if not etf_item:
-                    etf_item = {"ticker": etf, "sector": "ETF", "tipo": "ETF"}
-                    
-                filtered_universe.append(etf_item)
-                logging.info(f"ETF específico agregado: {etf}")
-    
-    # Incluir T-Bills si se solicita
-    if include_tbills:
-        tbills = [item for item in UNIVERSE if item["tipo"] == "Bono"]
-        if tbills:
-            filtered_universe.extend(tbills)
-    
-    # Si no hay suficientes opciones, advertir
-    if len(filtered_universe) < 3:
-        warnings.append("No hay suficientes opciones disponibles para los sectores seleccionados.")
-        # Añadir algunas opciones adicionales
-        additional = [item for item in UNIVERSE if item not in filtered_universe][:3]
-        filtered_universe.extend(additional)
-    
-    # Distribuir el monto según el horizonte y tipo de activos
-    if horizon == "corto":
-        # Corto plazo: más conservador, más bonos
-        weights = {"Acción": 0.3, "ETF": 0.3, "Bono": 0.4}
-    elif horizon == "intermedio":
-        # Intermedio: balanceado
-        weights = {"Acción": 0.4, "ETF": 0.4, "Bono": 0.2}
-    else:  # largo
-        # Largo plazo: más agresivo, más acciones
-        weights = {"Acción": 0.5, "ETF": 0.4, "Bono": 0.1}
-    
-    # Si no se incluyen bonos, redistribuir
-    if not include_tbills:
-        weights["Acción"] += weights["Bono"] / 2
-        weights["ETF"] += weights["Bono"] / 2
-        weights["Bono"] = 0
-    
-    # Calcular montos por tipo de activo
-    amounts = {tipo: amount * weight for tipo, weight in weights.items()}
-    
-    # Obtener API key de Alpha Vantage
-    ALPHAVANTAGE_API_KEY = os.getenv("ALPHAVANTAGE_API_KEY")
-    
-    # Seleccionar activos por tipo
-    for tipo, tipo_amount in amounts.items():
-        if tipo_amount <= 0:
-            continue
-        
-        # Filtrar por tipo
-        tipo_assets = [item for item in filtered_universe if item["tipo"] == tipo]
-        
-        if not tipo_assets:
-            continue
-        
-        # Determinar cuántos activos seleccionar
-        num_assets = min(len(tipo_assets), 3 if tipo == "Acción" else 3 if tipo == "ETF" else 1)
-        
-        # Para ETFs, dar prioridad a los seleccionados por el usuario
-        if tipo == "ETF" and selected_etfs:
-            # Filtrar ETFs seleccionados por el usuario que estén en tipo_assets
-            user_selected_etfs = [item for item in tipo_assets if item["ticker"] in selected_etfs]
-            
-            # Si hay ETFs seleccionados por el usuario, usarlos primero
-            if user_selected_etfs:
-                # Si hay suficientes ETFs seleccionados, usar solo esos
-                if len(user_selected_etfs) >= num_assets:
-                    selected = user_selected_etfs[:num_assets]
-                # Si no hay suficientes, usar los seleccionados y completar con aleatorios
-                else:
-                    remaining = [item for item in tipo_assets if item not in user_selected_etfs]
-                    remaining_needed = num_assets - len(user_selected_etfs)
-                    
-                    if remaining and remaining_needed > 0:
-                        import random
-                        selected = user_selected_etfs + random.sample(remaining, min(remaining_needed, len(remaining)))
-                    else:
-                        selected = user_selected_etfs
-            # Si no hay ETFs seleccionados por el usuario en tipo_assets, seleccionar aleatoriamente
-            else:
-                import random
-                selected = random.sample(tipo_assets, num_assets)
-        # Para otros tipos de activos, seleccionar aleatoriamente
-        else:
-            import random
-            selected = random.sample(tipo_assets, num_assets)
-        
-        # Distribuir el monto equitativamente
-        asset_amount = tipo_amount / len(selected)
-        
-        for asset in selected:
-            # Intentar obtener precio real de Alpha Vantage con reintentos
-            price = None
-            if ALPHAVANTAGE_API_KEY and asset["ticker"] != "T-BILL":
-                # Intentar hasta 3 veces con diferentes endpoints
-                for attempt in range(3):
-                    try:
-                        # Primer intento: GLOBAL_QUOTE
-                        if attempt == 0:
-                            url = f"https://www.alphavantage.co/query?function=GLOBAL_QUOTE&symbol={asset['ticker']}&apikey={ALPHAVANTAGE_API_KEY}"
-                            resp = requests.get(url, timeout=15)
-                            data = resp.json()
-                            
-                            if "Global Quote" in data and "05. price" in data["Global Quote"]:
-                                price = float(data["Global Quote"]["05. price"])
-                                logging.info(f"Precio real obtenido para {asset['ticker']} (GLOBAL_QUOTE): ${price}")
-                                break
-                        
-                        # Segundo intento: TIME_SERIES_DAILY
-                        elif attempt == 1:
-                            url = f"https://www.alphavantage.co/query?function=TIME_SERIES_DAILY&symbol={asset['ticker']}&apikey={ALPHAVANTAGE_API_KEY}"
-                            resp = requests.get(url, timeout=15)
-                            data = resp.json()
-                            
-                            if "Time Series (Daily)" in data:
-                                # Obtener la fecha más reciente
-                                latest_date = list(data["Time Series (Daily)"].keys())[0]
-                                price = float(data["Time Series (Daily)"][latest_date]["4. close"])
-                                logging.info(f"Precio real obtenido para {asset['ticker']} (TIME_SERIES_DAILY): ${price}")
-                                break
-                        
-                        # Tercer intento: Usar precios predefinidos para acciones comunes
-                        else:
-                            common_prices = {
-                                "AAPL": 175.34,
-                                "MSFT": 402.78,
-                                "JNJ": 147.56,
-                                "V": 275.96,
-                                "JPM": 198.47,
-                                "VOO": 470.15,
-                                "QQQ": 438.27,
-                                "SPY": 468.32
-                            }
-                            
-                            if asset["ticker"] in common_prices:
-                                price = common_prices[asset["ticker"]]
-                                logging.info(f"Usando precio predefinido para {asset['ticker']}: ${price}")
-                                break
-                            
-                        # Esperar un poco entre intentos para no sobrecargar la API
-                        if attempt < 2:
-                            import time
-                            time.sleep(1)
-                            
-                    except Exception as e:
-                        logging.error(f"Error en intento {attempt+1} al obtener precio para {asset['ticker']}: {e}")
-                        if attempt == 2:
-                            warnings.append(f"No se pudo obtener el precio de {asset['ticker']}.")
-            
-            # Si no se pudo obtener el precio real, usar simulación
-            if price is None:
-                if asset["ticker"] == "T-BILL":
-                    price = 100  # Precio fijo para T-Bills
-                else:
-                    # Simulación más realista basada en el tipo de activo
-                    if asset["tipo"] == "Acción":
-                        price = random.uniform(100, 400)  # Precio más realista para acciones
-                    elif asset["tipo"] == "ETF":
-                        price = random.uniform(200, 500)  # Precio más realista para ETFs
-                    else:
-                        price = random.uniform(50, 200)
-                    
-                    logging.warning(f"Usando precio simulado para {asset['ticker']}: ${price:.2f}")
-                    warnings.append(f"No se pudo obtener el precio de {asset['ticker']}.")
-            
-            cantidad = asset_amount / price
-            
-            # Añadir al portafolio
-            portfolio_item = {
-                "ticker": asset["ticker"],
-                "sector": asset["sector"],
-                "tipo": asset["tipo"],
-                "peso": round(asset_amount / amount * 100, 2),
-                "price": round(price, 2),
-                "cantidad": round(cantidad, 2),
-                "inversion": round(asset_amount, 2),
-                "recomendacion": "Comprar"
-            }
-            
-            # Añadir métricas de value investing si están disponibles
-            if asset["ticker"] in METRICAS:
-                metrics = METRICAS[asset["ticker"]]
-                portfolio_item.update({
-                    "ROE": metrics["ROE"],
-                    "PE": metrics["P/E"],
-                    "margen_beneficio": metrics["Margen de Beneficio"],
-                    "ratio_deuda": metrics["Ratio de Deuda"],
-                    "crecimiento_fcf": metrics["Crecimiento de FCF"],
-                    "moat": metrics["Moat Cualitativo"]
-                })
-            
-            portfolio.append(portfolio_item)
-    global last_portfolio
-    last_portfolio = {"portfolio": portfolio, "amount": amount, "params": params}
-    logging.info(f"Portafolio generado: {portfolio}")
-    result = {"status": "ok"}
-    if warnings:
-        result["warnings"] = warnings
-    return result
-
-# Endpoint para obtener el portafolio generado
-@app.get("/portfolio")
-def get_portfolio():
-    if not last_portfolio:
-        return JSONResponse(content={"error": "No se ha generado un portafolio aún."}, status_code=404)
-    return JSONResponse(content=last_portfolio["portfolio"])
-
-# Endpoint para obtener datos históricos de precios
-@app.get("/historical_prices")
-async def get_historical_prices(ticker: str, period: str = "1year"):
-    if not ALPHAVANTAGE_API_KEY:
-        raise HTTPException(status_code=500, detail="API key no configurada")
-    
     try:
-        # Determinar la función y el intervalo según el período solicitado
-        if period == "1month":
-            function = "TIME_SERIES_DAILY"
-            key = "Time Series (Daily)"
-            limit = 30  # Últimos 30 días
-        elif period == "6months":
-            function = "TIME_SERIES_WEEKLY"
-            key = "Weekly Time Series"
-            limit = 26  # Últimas 26 semanas
-        else:  # 1year o default
-            function = "TIME_SERIES_MONTHLY"
-            key = "Monthly Time Series"
-            limit = 12  # Últimos 12 meses
+        # Leer datos del request
+        data = await request.json()
+        logger.info(f"Datos recibidos: {data}")
         
-        url = f"https://www.alphavantage.co/query?function={function}&symbol={ticker}&apikey={ALPHAVANTAGE_API_KEY}"
-        response = requests.get(url, timeout=15)
-        data = response.json()
+        # Obtener parámetros
+        user_id = data.get("user_id", str(uuid.uuid4()))
+        name = data.get("name", "Mi Portfolio")
+        amount = float(data.get("amount", 10000))
+        horizon = data.get("horizon", "largo")
+        include_tbills = data.get("includeTBills", False)
+        sectors = data.get("sectors", [])
+        target_alloc = data.get("target_alloc", {"value": 40, "growth": 40, "bonds": 20})
         
-        if key not in data:
-            # Intentar con datos simulados si no hay datos reales
-            return generate_simulated_historical_data(ticker, period)
+        logger.info(f"Generando portafolio para monto: {amount}, sectores: {sectors}, T-Bills: {include_tbills}")
         
-        time_series = data[key]
-        dates = sorted(time_series.keys())[-limit:]  # Obtener las últimas fechas según el límite
+        # Validar asignación
+        total_alloc = target_alloc.get("value", 0) + target_alloc.get("growth", 0) + target_alloc.get("bonds", 0)
+        if total_alloc != 100:
+            return JSONResponse(
+                status_code=400,
+                content={"error": f"La asignación total debe ser 100%, recibido: {total_alloc}%"}
+            )
         
-        result = []
-        for date in dates:
-            close_price = float(time_series[date]["4. close"])
-            result.append({
-                "date": date,
-                "price": close_price
-            })
+        # Lógica de selección mejorada
+        filtered = []
+        etfs = [a for a in UNIVERSE if a["tipo"] == "ETF"]
+        acciones = [a for a in UNIVERSE if a["tipo"] == "Acción" and (not sectors or a["sector"] in sectors)]
         
-        return result
+        if amount < 2000:
+            filtered = etfs.copy()
+            if acciones and len(filtered) < 2:
+                filtered += acciones[:2 - len(filtered)]
+            if include_tbills:
+                filtered.append(next(a for a in UNIVERSE if a["ticker"] == "T-BILL"))
+        else:
+            filtered = acciones.copy()
+            if len(filtered) < 2:
+                filtered += etfs
+            else:
+                filtered += [etf for etf in etfs if etf not in filtered]
+            if include_tbills:
+                filtered.append(next(a for a in UNIVERSE if a["ticker"] == "T-BILL"))
+        
+        # Eliminar duplicados
+        tickers_seen = set()
+        filtered_unique = []
+        for item in filtered:
+            if item["ticker"] not in tickers_seen:
+                filtered_unique.append(item)
+                tickers_seen.add(item["ticker"])
+        
+        # Crear el portfolio usando el servicio
+        portfolio = portfolio_service.create_portfolio(user_id, name, target_alloc)
+        
+        # Optimizar el portfolio
+        optimized = portfolio_service.optimize_portfolio(portfolio["id"], amount)
+        
+        # Guardar el último portfolio generado para este usuario
+        last_portfolio[user_id] = optimized
+        
+        return optimized
     
     except Exception as e:
-        logging.error(f"Error al obtener datos históricos para {ticker}: {str(e)}")
-        # Si hay un error, devolver datos simulados
-        return generate_simulated_historical_data(ticker, period)
+        logger.error(f"Error generando portfolio: {str(e)}")
+        import traceback
+        logger.error(traceback.format_exc())
+        return JSONResponse(
+            status_code=500,
+            content={"error": "Error al generar portfolio", "details": str(e)}
+        )
+
+# Endpoint para obtener el portafolio generado
+@app.get("/get_portfolio")
+def get_portfolio():
+    if not last_portfolio:
+        return JSONResponse(status_code=404, content={"error": "No hay portfolio generado"})
+    return last_portfolio
+
+# Endpoint para obtener datos históricos de precios
+@app.get("/historical_prices/{ticker}")
+def get_historical_prices(ticker: str, period: str = "1year"):
+    try:
+        # Verificar si el ticker existe en nuestro universo
+        if ticker not in [a["ticker"] for a in UNIVERSE]:
+            return JSONResponse(
+                status_code=404,
+                content={"error": f"Ticker {ticker} no encontrado en el universo de inversión"}
+            )
+        
+        # Usar el servicio de gráficos para obtener los datos históricos
+        try:
+            # Obtener datos del chart service
+            chart_data = chart_service.get_price_chart_data(ticker, period)
+            
+            # Si no hay datos, usar datos simulados
+            if not chart_data or "prices" not in chart_data or not chart_data["prices"]:
+                logger.warning(f"No se encontraron datos para {ticker}. Usando datos simulados.")
+                return generate_simulated_historical_data(ticker, period)
+                
+            return chart_data
+            
+        except Exception as e:
+            logger.warning(f"Error al obtener datos reales para {ticker}: {str(e)}. Usando datos simulados.")
+            # Si falla, usar datos simulados
+            return generate_simulated_historical_data(ticker, period)
+    
+    except Exception as e:
+        logger.error(f"Error al obtener precios históricos: {str(e)}")
+        return JSONResponse(
+            status_code=500,
+            content={"error": "Error al obtener precios históricos", "details": str(e)}
+        )
 
 # Función para generar datos históricos simulados
 def generate_simulated_historical_data(ticker: str, period: str = "1year"):
@@ -450,72 +264,115 @@ def generate_simulated_historical_data(ticker: str, period: str = "1year"):
     return result
 
 # Endpoint para obtener datos comparativos en tiempo real
-@app.get("/comparative_data")
+@app.get("/comparative_data/{tickers}")
 async def get_comparative_data(tickers: str):
     ticker_list = tickers.split(",")
     result = []
     
     for ticker in ticker_list:
         try:
-            # Intentar obtener datos fundamentales de Alpha Vantage
-            if ALPHAVANTAGE_API_KEY:
-                url = f"https://www.alphavantage.co/query?function=OVERVIEW&symbol={ticker}&apikey={ALPHAVANTAGE_API_KEY}"
-                response = requests.get(url, timeout=15)
-                data = response.json()
+            # Verificar si el ticker existe en nuestro universo
+            if ticker not in [a["ticker"] for a in UNIVERSE]:
+                logger.warning(f"Ticker {ticker} no encontrado en el universo de inversión")
+                continue
+            
+            # Intentar obtener datos fundamentales usando el servicio de Alpha Vantage
+            try:
+                # Obtener datos fundamentales
+                fundamental_data = alpha_vantage_client.get_fundamental_data(ticker)
                 
-                if "Symbol" in data:
-                    # Extraer métricas fundamentales
-                    company_data = {
-                        "company": data.get("Name", ticker),
-                        "ROE": float(data.get("ReturnOnEquityTTM", "0")) * 100 if data.get("ReturnOnEquityTTM") else None,
-                        "P/E": float(data.get("PERatio", "0")) if data.get("PERatio") else None,
-                        "Margen de Beneficio": f"{float(data.get('ProfitMargin', '0')) * 100:.1f}%" if data.get("ProfitMargin") else None,
-                        "Ratio de Deuda": data.get("DebtToEquityRatio", None),
-                        "Crecimiento de FCF": None,  # No disponible directamente en Alpha Vantage
-                        "Moat Cualitativo": None  # Requiere análisis cualitativo
-                    }
-                    
-                    result.append(company_data)
-                    continue
+                # Obtener precio en tiempo real
+                price_data = alpha_vantage_client.get_real_time_price(ticker)
+                
+                # Obtener análisis cualitativo usando Claude
+                qualitative_analysis = claude_service.get_stock_analysis(ticker)
+                
+                # Extraer métricas fundamentales
+                company_data = {
+                    "company": fundamental_data.get("Name", ticker),
+                    "ticker": ticker,
+                    "price": price_data.get("price"),
+                    "change": price_data.get("change_percent"),
+                    "ROE": float(fundamental_data.get("ReturnOnEquityTTM", "0")) * 100 if fundamental_data.get("ReturnOnEquityTTM") else None,
+                    "P/E": float(fundamental_data.get("PERatio", "0")) if fundamental_data.get("PERatio") else None,
+                    "Margen de Beneficio": f"{float(fundamental_data.get('ProfitMargin', '0')) * 100:.1f}%" if fundamental_data.get("ProfitMargin") else None,
+                    "Ratio de Deuda": fundamental_data.get("DebtToEquityRatio"),
+                    "Crecimiento de FCF": qualitative_analysis.get("fcf_growth"),
+                    "Moat Cualitativo": qualitative_analysis.get("moat_rating"),
+                    "Sector": fundamental_data.get("Sector"),
+                    "Industria": fundamental_data.get("Industry"),
+                    "Capitalización": fundamental_data.get("MarketCapitalization"),
+                    "Dividendo": fundamental_data.get("DividendYield")
+                }
+                
+                result.append(company_data)
+                continue
+                
+            except Exception as e:
+                logger.warning(f"Error al obtener datos reales para {ticker}: {str(e)}. Usando datos alternativos.")
             
             # Si no se pueden obtener datos reales, usar datos de METRICAS si están disponibles
             if ticker in METRICAS:
                 metrics = METRICAS[ticker]
+                ticker_info = next((a for a in UNIVERSE if a["ticker"] == ticker), {})
+                
                 company_data = {
                     "company": ticker,
+                    "ticker": ticker,
+                    "price": None,  # No disponible sin datos reales
+                    "change": None,  # No disponible sin datos reales
                     "ROE": metrics["ROE"],
                     "P/E": metrics["P/E"],
                     "Margen de Beneficio": metrics["Margen de Beneficio"],
                     "Ratio de Deuda": metrics["Ratio de Deuda"],
                     "Crecimiento de FCF": metrics["Crecimiento de FCF"],
-                    "Moat Cualitativo": metrics["Moat Cualitativo"]
+                    "Moat Cualitativo": metrics["Moat Cualitativo"],
+                    "Sector": ticker_info.get("sector"),
+                    "Industria": None,
+                    "Capitalización": None,
+                    "Dividendo": None
                 }
                 result.append(company_data)
                 continue
             
             # Si no hay datos disponibles, generar datos simulados
+            ticker_info = next((a for a in UNIVERSE if a["ticker"] == ticker), {})
             company_data = {
                 "company": ticker,
+                "ticker": ticker,
+                "price": round(random.uniform(50, 500), 2),
+                "change": f"{random.uniform(-5, 5):.2f}%",
                 "ROE": round(random.uniform(5, 25), 1),
                 "P/E": round(random.uniform(10, 30), 1),
                 "Margen de Beneficio": f"{random.uniform(5, 30):.1f}%",
                 "Ratio de Deuda": f"{random.uniform(0.1, 0.8):.1f}",
                 "Crecimiento de FCF": f"{random.uniform(3, 15):.1f}%",
-                "Moat Cualitativo": random.choice(["Alto", "Medio", "Bajo"])
+                "Moat Cualitativo": random.choice(["Alto", "Medio", "Bajo"]),
+                "Sector": ticker_info.get("sector"),
+                "Industria": None,
+                "Capitalización": f"{random.uniform(1, 500):.1f}B",
+                "Dividendo": f"{random.uniform(0, 5):.2f}%"
             }
             result.append(company_data)
             
         except Exception as e:
-            logging.error(f"Error al obtener datos comparativos para {ticker}: {str(e)}")
+            logger.error(f"Error al obtener datos comparativos para {ticker}: {str(e)}")
             # En caso de error, agregar datos simulados
             result.append({
                 "company": ticker,
+                "ticker": ticker,
+                "price": round(random.uniform(50, 500), 2),
+                "change": f"{random.uniform(-5, 5):.2f}%",
                 "ROE": round(random.uniform(5, 25), 1),
                 "P/E": round(random.uniform(10, 30), 1),
                 "Margen de Beneficio": f"{random.uniform(5, 30):.1f}%",
                 "Ratio de Deuda": f"{random.uniform(0.1, 0.8):.1f}",
                 "Crecimiento de FCF": f"{random.uniform(3, 15):.1f}%",
-                "Moat Cualitativo": random.choice(["Alto", "Medio", "Bajo"])
+                "Moat Cualitativo": random.choice(["Alto", "Medio", "Bajo"]),
+                "Sector": None,
+                "Industria": None,
+                "Capitalización": f"{random.uniform(1, 500):.1f}B",
+                "Dividendo": f"{random.uniform(0, 5):.2f}%"
             })
     
     return result
@@ -578,67 +435,95 @@ async def justification():
         logging.error(f"Error al conectar con Claude: {e}")
         return JSONResponse(content={"error": f"Error al conectar con Claude: {str(e)}"}, status_code=500)
 
-@app.get("/justification/accion")
+@app.get("/justification_accion/{ticker}")
 async def justification_accion(ticker: str):
-    import os
-    import requests
-    global last_portfolio
-    if not last_portfolio or "portfolio" not in last_portfolio:
-        return JSONResponse(content={"error": "Primero genera un portafolio."}, status_code=400)
-    portfolio = last_portfolio["portfolio"]
-    tickers = [a["ticker"] for a in portfolio if a["tipo"] in ["Acción", "ETF"]]
-    # Obtener el análisis general primero
-    prompt_general = (
-        "Eres un analista de inversiones. Explica de manera detallada por qué las siguientes acciones y ETFs fueron seleccionados para el portafolio de un inversionista considerando su sector, peso, métricas clave y contexto de mercado. Hazlo en español y sé específico para cada ticker: " + ", ".join(tickers)
-    )
-    CLAUDE_API_KEY = os.getenv("CLAUDE_API_KEY")
-    url = "https://api.anthropic.com/v1/messages"
-    headers = {
-        "x-api-key": CLAUDE_API_KEY,
-        "anthropic-version": "2023-06-01",
-        "content-type": "application/json"
-    }
-    data_general = {
-        "model": "claude-3-7-sonnet-20250219",
-        "max_tokens": 1200,
-        "temperature": 0.7,
-        "messages": [
-            {"role": "user", "content": prompt_general}
-        ]
-    }
     try:
-        resp_general = requests.post(url, headers=headers, json=data_general, timeout=60)
-        resp_general.raise_for_status()
-        result_general = resp_general.json()
-        analysis_general = ""
-        if "content" in result_general and result_general["content"]:
-            analysis_general = result_general["content"][0]["text"]
-        if not analysis_general or len(analysis_general.strip()) < 10:
-            return JSONResponse(content={"error": "Claude no devolvió análisis general."}, status_code=500)
-        # Ahora pedirle a Claude que extraiga SOLO el fragmento para el ticker
-        prompt_extract = (
-            f"Del siguiente análisis de portafolio, extrae y devuelve únicamente el análisis detallado correspondiente a la acción o ETF con ticker '{ticker}'. Si no existe, responde 'No hay análisis para este ticker'.\n\nAnálisis completo:\n" + analysis_general + f"\n\nDevuelve solo el análisis de {ticker}, en HTML resaltando en amarillo el bloque principal."
-        )
-        data_extract = {
-            "model": "claude-3-7-sonnet-20250219",
-            "max_tokens": 600,
-            "temperature": 0.3,
-            "messages": [
-                {"role": "user", "content": prompt_extract}
-            ]
-        }
-        resp_extract = requests.post(url, headers=headers, json=data_extract, timeout=60)
-        resp_extract.raise_for_status()
-        result_extract = resp_extract.json()
-        fragment = ""
-        if "content" in result_extract and result_extract["content"]:
-            fragment = result_extract["content"][0]["text"]
-        if not fragment or len(fragment.strip()) < 10:
-            return JSONResponse(content={"error": "Claude no devolvió análisis individual."}, status_code=500)
-        return {"analysis": fragment}
+        # Verificar si el ticker existe en nuestro universo
+        if ticker not in [a["ticker"] for a in UNIVERSE]:
+            return JSONResponse(
+                status_code=404,
+                content={"error": f"Ticker {ticker} no encontrado en el universo de inversión"}
+            )
+        
+        # Obtener datos fundamentales y precio actual
+        try:
+            # Obtener datos fundamentales
+            fundamental_data = alpha_vantage_client.get_fundamental_data(ticker)
+            
+            # Obtener precio en tiempo real
+            price_data = alpha_vantage_client.get_real_time_price(ticker)
+            
+            # Usar el servicio de Claude para obtener un análisis detallado
+            analysis = claude_service.get_detailed_stock_analysis(ticker, fundamental_data, price_data)
+            
+            # Obtener datos históricos para el contexto
+            historical_data = chart_service.get_price_chart_data(ticker, "1year")
+            
+            # Obtener métricas de rendimiento
+            performance_metrics = chart_service.get_performance_metrics(ticker)
+            
+            # Combinar toda la información en un análisis completo
+            complete_analysis = {
+                "ticker": ticker,
+                "company_name": fundamental_data.get("Name", ticker),
+                "current_price": price_data.get("price"),
+                "change_percent": price_data.get("change_percent"),
+                "sector": fundamental_data.get("Sector"),
+                "industry": fundamental_data.get("Industry"),
+                "market_cap": fundamental_data.get("MarketCapitalization"),
+                "pe_ratio": fundamental_data.get("PERatio"),
+                "dividend_yield": fundamental_data.get("DividendYield"),
+                "roe": fundamental_data.get("ReturnOnEquityTTM"),
+                "profit_margin": fundamental_data.get("ProfitMargin"),
+                "debt_to_equity": fundamental_data.get("DebtToEquityRatio"),
+                "performance": performance_metrics,
+                "analysis_html": analysis.get("analysis_html"),
+                "investment_thesis": analysis.get("investment_thesis"),
+                "strengths": analysis.get("strengths"),
+                "weaknesses": analysis.get("weaknesses"),
+                "opportunities": analysis.get("opportunities"),
+                "threats": analysis.get("threats"),
+                "recommendation": analysis.get("recommendation")
+            }
+            
+            return complete_analysis
+            
+        except Exception as e:
+            logger.warning(f"Error al obtener datos reales para {ticker}: {str(e)}. Usando datos alternativos.")
+            
+            # Si no se pueden obtener datos reales, usar datos de METRICAS si están disponibles
+            if ticker in METRICAS:
+                metrics = METRICAS[ticker]
+                ticker_info = next((a for a in UNIVERSE if a["ticker"] == ticker), {})
+                
+                # Generar un análisis simplificado basado en los datos disponibles
+                simplified_analysis = claude_service.get_simplified_analysis(ticker, metrics)
+                
+                return {
+                    "ticker": ticker,
+                    "company_name": ticker,
+                    "sector": ticker_info.get("sector"),
+                    "roe": metrics.get("ROE"),
+                    "pe_ratio": metrics.get("P/E"),
+                    "profit_margin": metrics.get("Margen de Beneficio"),
+                    "debt_to_equity": metrics.get("Ratio de Deuda"),
+                    "analysis_html": simplified_analysis.get("analysis_html"),
+                    "investment_thesis": simplified_analysis.get("investment_thesis"),
+                    "recommendation": simplified_analysis.get("recommendation")
+                }
+            
+            # Si no hay datos disponibles, generar un mensaje de error
+            return JSONResponse(
+                status_code=404,
+                content={"error": f"No se encontraron datos suficientes para analizar {ticker}"}
+            )
+    
     except Exception as e:
-        logging.error(f"Error al obtener análisis individual de Claude: {e}")
-        return JSONResponse(content={"error": f"Error al obtener análisis individual: {str(e)}"}, status_code=500)
+        logger.error(f"Error al obtener análisis para {ticker}: {str(e)}")
+        return JSONResponse(
+            status_code=500,
+            content={"error": f"Error al obtener análisis individual: {str(e)}"}
+        )
 
 @app.get("/visualizations/{img_name}")
 def get_visualization(img_name: str):
@@ -647,86 +532,39 @@ def get_visualization(img_name: str):
         return JSONResponse(content={"error": "Visualization not found"}, status_code=404)
     return FileResponse(img_path)
 
-@app.get("/real_time_price")
+@app.get("/real_time_price/{ticker}")
 async def real_time_price(ticker: str):
-    ALPHAVANTAGE_API_KEY = os.getenv("ALPHAVANTAGE_API_KEY")
-    if not ALPHAVANTAGE_API_KEY:
-        return JSONResponse(content={"error": "Alpha Vantage API key no configurada"}, status_code=500)
-    
-    # Precios predefinidos para acciones comunes (como fallback)
-    common_prices = {
-        "AAPL": 175.34,
-        "MSFT": 402.78,
-        "JNJ": 147.56,
-        "V": 275.96,
-        "JPM": 198.47,
-        "VOO": 470.15,
-        "QQQ": 438.27,
-        "SPY": 468.32,
-        "T-BILL": 100.00
-    }
-    
-    # Intentar hasta 3 veces con diferentes endpoints
-    for attempt in range(3):
-        try:
-            # Primer intento: GLOBAL_QUOTE
-            if attempt == 0:
-                url = f"https://www.alphavantage.co/query?function=GLOBAL_QUOTE&symbol={ticker}&apikey={ALPHAVANTAGE_API_KEY}"
-                resp = requests.get(url, timeout=15)
-                data = resp.json()
-                
-                if "Global Quote" in data and "05. price" in data["Global Quote"]:
-                    price = float(data["Global Quote"]["05. price"])
-                    logging.info(f"Precio real obtenido para {ticker} (GLOBAL_QUOTE): ${price}")
-                    return {"ticker": ticker, "price": price, "source": "GLOBAL_QUOTE"}
+    try:
+        # Verificar si el ticker existe en nuestro universo
+        if ticker not in [a["ticker"] for a in UNIVERSE]:
+            return JSONResponse(
+                status_code=404,
+                content={"error": f"Ticker {ticker} no encontrado en el universo de inversión"}
+            )
             
-            # Segundo intento: TIME_SERIES_DAILY
-            elif attempt == 1:
-                url = f"https://www.alphavantage.co/query?function=TIME_SERIES_DAILY&symbol={ticker}&apikey={ALPHAVANTAGE_API_KEY}"
-                resp = requests.get(url, timeout=15)
-                data = resp.json()
-                
-                if "Time Series (Daily)" in data:
-                    # Obtener la fecha más reciente
-                    latest_date = list(data["Time Series (Daily)"].keys())[0]
-                    price = float(data["Time Series (Daily)"][latest_date]["4. close"])
-                    logging.info(f"Precio real obtenido para {ticker} (TIME_SERIES_DAILY): ${price}")
-                    return {"ticker": ticker, "price": price, "source": "TIME_SERIES_DAILY"}
+        # Usar el servicio de Alpha Vantage para obtener el precio en tiempo real
+        price_data = alpha_vantage_client.get_real_time_price(ticker)
+        
+        # Si no hay datos, devolver un error
+        if not price_data or "price" not in price_data:
+            return JSONResponse(
+                status_code=404,
+                content={"error": f"No se pudo obtener el precio en tiempo real para {ticker}"}
+            )
             
-            # Tercer intento: Usar precios predefinidos
-            elif attempt == 2 and ticker in common_prices:
-                price = common_prices[ticker]
-                logging.info(f"Usando precio predefinido para {ticker}: ${price}")
-                return {"ticker": ticker, "price": price, "source": "PREDEFINED"}
+        # Agregar información adicional del universo
+        ticker_info = next((a for a in UNIVERSE if a["ticker"] == ticker), None)
+        if ticker_info:
+            price_data["sector"] = ticker_info.get("sector")
+            price_data["tipo"] = ticker_info.get("tipo")
             
-            # Esperar un poco entre intentos para no sobrecargar la API
-            if attempt < 2:
-                import time
-                time.sleep(1)
-                
-        except Exception as e:
-            logging.error(f"Error en intento {attempt+1} al obtener precio para {ticker}: {e}")
-            if attempt == 2:
-                # Si llegamos al último intento y sigue fallando, intentar usar precio predefinido
-                if ticker in common_prices:
-                    price = common_prices[ticker]
-                    logging.warning(f"Usando precio predefinido después de errores para {ticker}: ${price}")
-                    return {"ticker": ticker, "price": price, "source": "PREDEFINED_AFTER_ERROR"}
-    
-    # Si todo falla, usar simulación
-    import random
-    if ticker.startswith("T-"):
-        # Para bonos del tesoro
-        simulated_price = 100.00
-    elif any(etf in ticker for etf in ["VOO", "SPY", "QQQ", "VTI"]):
-        # Para ETFs
-        simulated_price = random.uniform(200, 500)
-    else:
-        # Para acciones
-        simulated_price = random.uniform(100, 400)
-    
-    logging.warning(f"Usando precio totalmente simulado para {ticker}: ${simulated_price:.2f}")
-    return {"ticker": ticker, "price": round(simulated_price, 2), "simulated": True}
+        return price_data
+    except Exception as e:
+        logger.error(f"Error obteniendo precio en tiempo real para {ticker}: {str(e)}")
+        return JSONResponse(
+            status_code=500,
+            content={"error": f"Error obteniendo precio para {ticker}", "details": str(e)}
+        )
 
 @app.get("/")
 def root():
