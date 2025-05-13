@@ -3,7 +3,7 @@
   buildCommand = "echo 'Building the application...'"
 
 [deploy]
-  startCommand = "python app_direct.py"
+  startCommand = "uvicorn app_direct:app --host 0.0.0.0 --port $PORT"
   healthcheckPath = "/test"
   healthcheckTimeout = 100
   restartPolicyType = "on_failure"
