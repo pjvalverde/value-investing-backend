@@ -7,7 +7,7 @@
   healthcheckPath = "/test"
   healthcheckTimeout = 100
   restartPolicyType = "on_failure"
-  startCommand = "bash start.sh"
+  # Eliminado startCommand para permitir configuración manual en Railway
 
 [env]
   PORT = "8000"
