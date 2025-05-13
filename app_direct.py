@@ -85,10 +85,12 @@ async def startup_event():
     alpha_vantage_client = AlphaVantageClient()
     
     # Inicializar el servicio de gru00e1ficos
-    chart_service = ChartService(alpha_vantage_client=alpha_vantage_client)
+    # La clase ChartService importa directamente el cliente de Alpha Vantage
+    chart_service = ChartService()
     
     # Inicializar el servicio de portfolio
-    portfolio_service = PortfolioService(alpha_vantage_client=alpha_vantage_client)
+    # La clase PortfolioService importa directamente el cliente de Alpha Vantage
+    portfolio_service = PortfolioService()
     
     # Inicializar el servicio de Claude
     # La clase ClaudeService obtiene la clave API directamente de las variables de entorno
