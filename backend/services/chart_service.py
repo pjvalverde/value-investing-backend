@@ -20,30 +20,30 @@ class ChartService:
     
     def get_price_chart_data(self, ticker: str, period: str = "1year") -> Dict[str, Any]:
         """Get price chart data for a ticker"""
-        # Get historical prices from Alpha Vantage client
-        historical_data = alpha_vantage_client.get_historical_prices(ticker, period)
-        
-        # Extract data for chart
-        dates = [item["date"] for item in historical_data["data"]]
-        prices = [item["close"] for item in historical_data["data"]]
-        
-        # Calculate moving averages if we have enough data
-        sma_50 = self._calculate_sma(prices, 50) if len(prices) >= 50 else None
-        sma_200 = self._calculate_sma(prices, 200) if len(prices) >= 200 else None
-        
-        # Calculate performance metrics
-        performance = self._calculate_performance(prices)
-        
-        return {
-            "ticker": ticker,
-            "period": period,
-            "dates": dates,
-            "prices": prices,
-            "sma_50": sma_50,
-            "sma_200": sma_200,
-            "performance": performance
-        }
+            # Get historical prices from Alpha Vantage client
+            historical_data = alpha_vantage_client.get_historical_prices(ticker, period)
             
+            # Extract data for chart
+            dates = [item["date"] for item in historical_data["data"]]
+            prices = [item["close"] for item in historical_data["data"]]
+            
+            # Calculate moving averages if we have enough data
+            sma_50 = self._calculate_sma(prices, 50) if len(prices) >= 50 else None
+            sma_200 = self._calculate_sma(prices, 200) if len(prices) >= 200 else None
+            
+            # Calculate performance metrics
+            performance = self._calculate_performance(prices)
+            
+            return {
+                "ticker": ticker,
+                "period": period,
+                "dates": dates,
+                "prices": prices,
+                "sma_50": sma_50,
+                "sma_200": sma_200,
+            "performance": performance
+            }
+    
     def _calculate_sma(self, prices: List[float], window: int) -> List[Optional[float]]:
         """Calculate Simple Moving Average"""
         sma = [None] * (window - 1)  # Start with None values for the first window-1 points
@@ -96,89 +96,89 @@ class ChartService:
             "performance": {}
         }
         
-        # Get data for each ticker
-        ticker_data = {}
-        common_dates = None
-        
-        for ticker in tickers:
-            chart_data = self.get_price_chart_data(ticker, period)
-            ticker_data[ticker] = chart_data
+            # Get data for each ticker
+            ticker_data = {}
+            common_dates = None
             
-            # Find common dates across all tickers
-            if common_dates is None:
-                common_dates = set(chart_data["dates"])
-            else:
-                common_dates = common_dates.intersection(set(chart_data["dates"]))
-        
-        # Convert back to sorted list
-        common_dates = sorted(list(common_dates))
-        result["dates"] = common_dates
-        
-        # Normalize prices to percentage change from first date
-        for ticker in tickers:
-            data = ticker_data[ticker]
+            for ticker in tickers:
+                chart_data = self.get_price_chart_data(ticker, period)
+                ticker_data[ticker] = chart_data
+                
+                # Find common dates across all tickers
+                if common_dates is None:
+                    common_dates = set(chart_data["dates"])
+                else:
+                    common_dates = common_dates.intersection(set(chart_data["dates"]))
             
-            # Find indices of common dates in this ticker's data
-            date_indices = [data["dates"].index(date) for date in common_dates if date in data["dates"]]
+            # Convert back to sorted list
+            common_dates = sorted(list(common_dates))
+            result["dates"] = common_dates
             
-            # Extract prices for common dates
-            prices = [data["prices"][i] for i in date_indices]
-            
-            # Normalize to percentage change from first price
-            first_price = prices[0] if prices else 100
-            normalized_prices = [((price / first_price) - 1) * 100 for price in prices]
-            
-            # Add to result
-            result["series"].append({
-                "ticker": ticker,
-                "normalized_prices": normalized_prices,
-                "raw_prices": prices
-            })
-            
-            # Add performance metrics
-            result["performance"][ticker] = data["performance"]
+            # Normalize prices to percentage change from first date
+            for ticker in tickers:
+                data = ticker_data[ticker]
+                
+                # Find indices of common dates in this ticker's data
+                date_indices = [data["dates"].index(date) for date in common_dates if date in data["dates"]]
+                
+                # Extract prices for common dates
+                prices = [data["prices"][i] for i in date_indices]
+                
+                # Normalize to percentage change from first price
+                first_price = prices[0] if prices else 100
+                normalized_prices = [((price / first_price) - 1) * 100 for price in prices]
+                
+                # Add to result
+                result["series"].append({
+                    "ticker": ticker,
+                    "normalized_prices": normalized_prices,
+                    "raw_prices": prices
+                })
+                
+                # Add performance metrics
+                result["performance"][ticker] = data["performance"]
         
         return result
     
     def get_portfolio_performance_chart(self, portfolio_data: Dict[str, Any], period: str = "1year") -> Dict[str, Any]:
         """Generate portfolio performance chart based on allocation"""
-        # Extract tickers and weights from portfolio
-        tickers = []
-        weights = []
-        
-        # Process value stocks
-        for stock in portfolio_data.get("allocation", {}).get("value", []):
-            tickers.append(stock["ticker"])
-            weights.append(stock["weight"])
-        
-        # Process growth stocks
-        for stock in portfolio_data.get("allocation", {}).get("growth", []):
-            tickers.append(stock["ticker"])
-            weights.append(stock["weight"])
-        
-        # Process bonds
-        for bond in portfolio_data.get("allocation", {}).get("bonds", []):
-            tickers.append(bond["ticker"])
-            weights.append(bond["weight"])
-        
-        # Get comparative data for all tickers
-        comparative_data = self.get_comparative_chart_data(tickers, period)
-        
-        # Calculate weighted portfolio performance
-        portfolio_prices = [0] * len(comparative_data["dates"])
-        
-        for i, series in enumerate(comparative_data["series"]):
-            ticker_weight = weights[i]
-            for j, price in enumerate(series["raw_prices"]):
-                # Add weighted contribution to portfolio
-                portfolio_prices[j] += price * ticker_weight
-        
-        # Normalize portfolio prices
-        first_price = portfolio_prices[0] if portfolio_prices else 100
-        normalized_portfolio = [((price / first_price) - 1) * 100 for price in portfolio_prices]
-        
-        # Calculate portfolio performance metrics
-        portfolio_performance = self._calculate_performance(portfolio_prices)
+            # Extract tickers and weights from portfolio
+            tickers = []
+            weights = []
+            
+            # Process value stocks
+            for stock in portfolio_data.get("allocation", {}).get("value", []):
+                tickers.append(stock["ticker"])
+                weights.append(stock["weight"])
+            
+            # Process growth stocks
+            for stock in portfolio_data.get("allocation", {}).get("growth", []):
+                tickers.append(stock["ticker"])
+                weights.append(stock["weight"])
+            
+            # Process bonds
+            for bond in portfolio_data.get("allocation", {}).get("bonds", []):
+                tickers.append(bond["ticker"])
+                weights.append(bond["weight"])
+            
+            # Get comparative data for all tickers
+            comparative_data = self.get_comparative_chart_data(tickers, period)
+            
+            # Calculate weighted portfolio performance
+            portfolio_prices = [0] * len(comparative_data["dates"])
+            
+            for i, series in enumerate(comparative_data["series"]):
+                ticker_weight = weights[i]
+                for j, price in enumerate(series["raw_prices"]):
+                    # Add weighted contribution to portfolio
+                    portfolio_prices[j] += price * ticker_weight
+            
+            # Normalize portfolio prices
+            first_price = portfolio_prices[0] if portfolio_prices else 100
+            normalized_portfolio = [((price / first_price) - 1) * 100 for price in portfolio_prices]
+            
+            # Calculate portfolio performance metrics
+            portfolio_performance = self._calculate_performance(portfolio_prices)
         
         # Add portfolio to comparative data
         comparative_data["portfolio"] = {
