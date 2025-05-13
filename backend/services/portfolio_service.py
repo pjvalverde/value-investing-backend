@@ -160,44 +160,91 @@ class PortfolioService:
             raise
     
     def _get_value_stocks(self, count: int = 3) -> List[Dict[str, Any]]:
-        """Get top value stocks"""
-        # Predefined value stocks for fallback
-        value_stocks = [
-            {"ticker": "AAPL", "name": "Apple Inc."},
-            {"ticker": "MSFT", "name": "Microsoft Corp."},
-            {"ticker": "JNJ", "name": "Johnson & Johnson"},
-            {"ticker": "PG", "name": "Procter & Gamble"},
-            {"ticker": "JPM", "name": "JPMorgan Chase"}
-        ]
-        
-        # Return the requested number of stocks
-        return value_stocks[:count]
+        """Get top value stocks using Perplexity API"""
+        try:
+            # Import here to avoid circular imports
+            from app_railway import get_value_stocks
+            import asyncio
+            
+            # Get value stocks from Perplexity API
+            logger.info("Obteniendo acciones value con Perplexity API")
+            value_stocks_data = asyncio.run(get_value_stocks())
+            
+            # Format the data
+            value_stocks = []
+            for stock in value_stocks_data[:count]:
+                value_stocks.append({
+                    "ticker": stock["ticker"],
+                    "name": stock["name"]
+                })
+            
+            logger.info(f"Se obtuvieron {len(value_stocks)} acciones value con Perplexity")
+            return value_stocks
+        except Exception as e:
+            logger.error(f"Error obteniendo acciones value con Perplexity: {str(e)}")
+            raise ValueError("No se pudieron obtener acciones value. Verifica la configuración de PERPLEXITY_API_KEY. No se usarán datos simulados ni predefinidos.")
     
     def _get_growth_stocks(self, count: int = 3) -> List[Dict[str, Any]]:
-        """Get top growth stocks"""
-        # Predefined growth stocks for fallback
-        growth_stocks = [
-            {"ticker": "NVDA", "name": "NVIDIA Corp."},
-            {"ticker": "TSLA", "name": "Tesla Inc."},
-            {"ticker": "AMZN", "name": "Amazon.com Inc."},
-            {"ticker": "GOOGL", "name": "Alphabet Inc."},
-            {"ticker": "META", "name": "Meta Platforms"}
-        ]
-        
-        # Return the requested number of stocks
-        return growth_stocks[:count]
+        """Get top growth stocks using Perplexity API"""
+        try:
+            # Import here to avoid circular imports
+            from app_railway import get_growth_stocks
+            import asyncio
+            
+            # Get growth stocks from Perplexity API
+            logger.info("Obteniendo acciones growth con Perplexity API")
+            growth_stocks_data = asyncio.run(get_growth_stocks())
+            
+            # Format the data
+            growth_stocks = []
+            for stock in growth_stocks_data[:count]:
+                growth_stocks.append({
+                    "ticker": stock["ticker"],
+                    "name": stock["name"]
+                })
+            
+            logger.info(f"Se obtuvieron {len(growth_stocks)} acciones growth con Perplexity")
+            return growth_stocks
+        except Exception as e:
+            logger.error(f"Error obteniendo acciones growth con Perplexity: {str(e)}")
+            raise ValueError("No se pudieron obtener acciones growth. Verifica la configuración de PERPLEXITY_API_KEY. No se usarán datos simulados ni predefinidos.")
     
     def _get_bond_etfs(self, count: int = 1) -> List[Dict[str, Any]]:
-        """Get bond ETFs"""
-        # Predefined bond ETFs
-        bond_etfs = [
-            {"ticker": "AGG", "name": "iShares Core U.S. Aggregate Bond ETF"},
-            {"ticker": "BND", "name": "Vanguard Total Bond Market ETF"},
-            {"ticker": "VCIT", "name": "Vanguard Intermediate-Term Corporate Bond ETF"}
-        ]
-        
-        # Return the requested number of ETFs
-        return bond_etfs[:count]
+        """Get bond ETFs using Alpha Vantage API"""
+        try:
+            # Usar Alpha Vantage para obtener datos de ETFs de bonos
+            logger.info("Obteniendo ETFs de bonos con Alpha Vantage API")
+            
+            # Lista de ETFs de bonos populares para buscar
+            bond_etf_tickers = ["AGG", "BND", "VCIT", "VCSH", "LQD", "MBB", "TIP", "GOVT"]
+            
+            # Obtener datos reales para cada ETF
+            bond_etfs = []
+            for ticker in bond_etf_tickers[:count+2]:  # Intentar con algunos extras en caso de error
+                try:
+                    # Obtener datos fundamentales
+                    fundamentals = alpha_vantage_client.get_stock_fundamentals(ticker)
+                    
+                    if fundamentals and "Name" in fundamentals:
+                        bond_etfs.append({
+                            "ticker": ticker,
+                            "name": fundamentals.get("Name", f"{ticker} ETF")
+                        })
+                        
+                        if len(bond_etfs) >= count:
+                            break
+                except Exception as e:
+                    logger.warning(f"Error obteniendo datos para el ETF {ticker}: {str(e)}")
+                    continue
+            
+            if not bond_etfs:
+                raise ValueError("No se pudieron obtener datos de ETFs de bonos")
+                
+            logger.info(f"Se obtuvieron {len(bond_etfs)} ETFs de bonos con Alpha Vantage")
+            return bond_etfs
+        except Exception as e:
+            logger.error(f"Error obteniendo ETFs de bonos: {str(e)}")
+            raise ValueError("No se pudieron obtener datos de ETFs de bonos. Verifica la configuración de ALPHAVANTAGE_API_KEY. No se usarán datos simulados ni predefinidos.")
     
     def _calculate_portfolio_metrics(self, value_stocks, growth_stocks, bond_etfs) -> Dict[str, float]:
         """Calculate portfolio metrics based on allocations"""
