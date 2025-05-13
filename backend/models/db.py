@@ -106,9 +106,9 @@ class Database:
     
     def query(self, sql, params=None):
         if not self.conn:
-            # Simulación en memoria para desarrollo
-            if "symbols" in sql.lower() and "strategy" in sql.lower():
-                return self.mock_symbols_query(sql)
+            # No se permiten datos simulados
+            logging.error("No hay conexión a la base de datos y no se usarán datos simulados")
+            raise ValueError("No hay conexión a la base de datos y no se usarán datos simulados")
             return {"rows": []}
         
         try:
@@ -128,30 +128,7 @@ class Database:
             logging.error(f"Error en consulta SQL: {str(e)}\nSQL: {sql}")
             return {"error": str(e)}
     
-    def mock_symbols_query(self, sql):
-        # Datos simulados para desarrollo sin base de datos
-        if "strategy = 'value'" in sql.lower():
-            return {
-                "rows": [
-                    {"ticker": "AAPL", "price": 175.50},
-                    {"ticker": "MSFT", "price": 325.20},
-                    {"ticker": "JNJ", "price": 152.75},
-                    {"ticker": "PG", "price": 145.30},
-                    {"ticker": "JPM", "price": 138.40}
-                ]
-            }
-        elif "strategy = 'growth'" in sql.lower():
-            return {
-                "rows": [
-                    {"ticker": "NVDA", "price": 450.80},
-                    {"ticker": "TSLA", "price": 220.50},
-                    {"ticker": "AMZN", "price": 178.30},
-                    {"ticker": "GOOGL", "price": 142.60},
-                    {"ticker": "META", "price": 480.25}
-                ]
-            }
-        else:
-            return {"rows": []}
+    # No se utilizan datos simulados bajo ninguna circunstancia
 
 # Instancia global de la base de datos
 db = Database()

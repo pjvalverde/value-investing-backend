@@ -91,7 +91,7 @@ class PortfolioService:
                     "amount": round(amount * value_weight_per_stock, 2),
                     "shares": round(amount * value_weight_per_stock / price),
                     "price": price,
-                    "price_source": price_data.get("source", "simulated")
+                    "price_source": price_data.get("source", "GLOBAL_QUOTE")
                 })
             
             # Create allocation for growth stocks
@@ -108,7 +108,7 @@ class PortfolioService:
                     "amount": round(amount * growth_weight_per_stock, 2),
                     "shares": round(amount * growth_weight_per_stock / price),
                     "price": price,
-                    "price_source": price_data.get("source", "simulated")
+                    "price_source": price_data.get("source", "GLOBAL_QUOTE")
                 })
             
             # Create allocation for bond ETFs
@@ -125,7 +125,7 @@ class PortfolioService:
                     "amount": round(amount * bond_weight_per_etf, 2),
                     "shares": round(amount * bond_weight_per_etf / price),
                     "price": price,
-                    "price_source": price_data.get("source", "simulated")
+                    "price_source": price_data.get("source", "GLOBAL_QUOTE")
                 })
             
             # Calculate portfolio metrics

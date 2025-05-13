@@ -49,34 +49,11 @@ app.include_router(portfolio_router, prefix="/api/portfolio", tags=["portfolio"]
 DATA_DIR = os.path.join(os.path.dirname(__file__), '..', 'docs')
 RESULTS_DIR = os.path.join(DATA_DIR, 'resultados')
 
-# Memoria temporal para guardar el último portafolio generado por usuario (simulación)
-last_portfolio = {}
+# No se utilizan listas predefinidas de tickers
+# Todos los tickers deben obtenerse en tiempo real de Perplexity y Alpha Vantage
 
-# Ejemplo de universo de acciones, ETFs y T-Bills por sector (puedes expandirlo)
-UNIVERSE = [
-    {"ticker": "AAPL", "sector": "Tecnología", "tipo": "Acción"},
-    {"ticker": "MSFT", "sector": "Tecnología", "tipo": "Acción"},
-    {"ticker": "JNJ", "sector": "Salud", "tipo": "Acción"},
-    {"ticker": "V", "sector": "Finanzas", "tipo": "Acción"},
-    {"ticker": "JPM", "sector": "Finanzas", "tipo": "Acción"},
-    {"ticker": "VOO", "sector": "ETF", "tipo": "ETF"},
-    {"ticker": "QQQ", "sector": "ETF", "tipo": "ETF"},
-    {"ticker": "SPY", "sector": "ETF", "tipo": "ETF"},
-    {"ticker": "T-BILL", "sector": "Gobierno", "tipo": "Bono"},
-]
-
-# Simulación de métricas de value investing (en producción, usar Alpha Vantage y DeepSeek)
-METRICAS = {
-    "AAPL": {"ROE": 30, "P/E": 28, "Margen de Beneficio": 23, "Ratio de Deuda": 0.5, "Crecimiento de FCF": 10, "Moat Cualitativo": "Alto"},
-    "MSFT": {"ROE": 35, "P/E": 32, "Margen de Beneficio": 31, "Ratio de Deuda": 0.4, "Crecimiento de FCF": 12, "Moat Cualitativo": "Alto"},
-    "JNJ": {"ROE": 25, "P/E": 18, "Margen de Beneficio": 20, "Ratio de Deuda": 0.3, "Crecimiento de FCF": 8, "Moat Cualitativo": "Medio"},
-    "V": {"ROE": 40, "P/E": 34, "Margen de Beneficio": 51, "Ratio de Deuda": 0.5, "Crecimiento de FCF": 15, "Moat Cualitativo": "Alto"},
-    "JPM": {"ROE": 18, "P/E": 12, "Margen de Beneficio": 25, "Ratio de Deuda": 0.8, "Crecimiento de FCF": 5, "Moat Cualitativo": "Medio"},
-    "VOO": {"ROE": 16, "P/E": 22, "Margen de Beneficio": 18, "Ratio de Deuda": 0.4, "Crecimiento de FCF": 7, "Moat Cualitativo": "Diversificado"},
-    "QQQ": {"ROE": 18, "P/E": 25, "Margen de Beneficio": 20, "Ratio de Deuda": 0.5, "Crecimiento de FCF": 8, "Moat Cualitativo": "Diversificado"},
-    "SPY": {"ROE": 15, "P/E": 21, "Margen de Beneficio": 17, "Ratio de Deuda": 0.4, "Crecimiento de FCF": 6, "Moat Cualitativo": "Diversificado"},
-    "T-BILL": {"ROE": None, "P/E": None, "Margen de Beneficio": None, "Ratio de Deuda": None, "Crecimiento de FCF": None, "Moat Cualitativo": None},
-}
+# No se utilizan datos simulados o predefinidos
+# Todas las métricas deben obtenerse en tiempo real de Alpha Vantage
 
 logging.basicConfig(level=logging.INFO)
 
