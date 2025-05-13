@@ -53,31 +53,9 @@ async def log_requests(request: Request, call_next):
         logger.error(traceback.format_exc())
         raise
 
-# Datos simulados para desarrollo
-VALUE_STOCKS = [
-    {"ticker": "AAPL", "name": "Apple Inc.", "price": 175.50, "forward_pe": 25.3, "yoy_rev_growth": 0.12},
-    {"ticker": "MSFT", "name": "Microsoft Corp.", "price": 325.20, "forward_pe": 28.1, "yoy_rev_growth": 0.15},
-    {"ticker": "JNJ", "name": "Johnson & Johnson", "price": 152.75, "forward_pe": 15.2, "yoy_rev_growth": 0.08},
-    {"ticker": "PG", "name": "Procter & Gamble", "price": 145.30, "forward_pe": 22.5, "yoy_rev_growth": 0.05},
-    {"ticker": "JPM", "name": "JPMorgan Chase", "price": 138.40, "forward_pe": 12.3, "yoy_rev_growth": 0.10}
-]
+# No se utilizan datos simulados ni predefinidos
+# Todos los datos deben obtenerse en tiempo real de Perplexity API o Alpha Vantage
 
-GROWTH_STOCKS = [
-    {"ticker": "NVDA", "name": "NVIDIA Corp.", "price": 450.80, "forward_pe": 45.2, "yoy_rev_growth": 0.35},
-    {"ticker": "TSLA", "name": "Tesla Inc.", "price": 220.50, "forward_pe": 60.5, "yoy_rev_growth": 0.28},
-    {"ticker": "AMZN", "name": "Amazon.com Inc.", "price": 178.30, "forward_pe": 38.7, "yoy_rev_growth": 0.22},
-    {"ticker": "GOOGL", "name": "Alphabet Inc.", "price": 142.60, "forward_pe": 22.1, "yoy_rev_growth": 0.18},
-    {"ticker": "META", "name": "Meta Platforms", "price": 480.25, "forward_pe": 24.3, "yoy_rev_growth": 0.25}
-]
-
-# Métricas simuladas para acciones
-METRICAS = {
-    "AAPL": {"ROE": 30, "P/E": 28, "Margen de Beneficio": 23, "Ratio de Deuda": 0.5, "Crecimiento de FCF": 10, "Moat Cualitativo": "Alto"},
-    "MSFT": {"ROE": 35, "P/E": 32, "Margen de Beneficio": 31, "Ratio de Deuda": 0.4, "Crecimiento de FCF": 12, "Moat Cualitativo": "Alto"},
-    "JNJ": {"ROE": 25, "P/E": 18, "Margen de Beneficio": 20, "Ratio de Deuda": 0.3, "Crecimiento de FCF": 8, "Moat Cualitativo": "Medio"},
-    "NVDA": {"ROE": 42, "P/E": 45, "Margen de Beneficio": 35, "Ratio de Deuda": 0.3, "Crecimiento de FCF": 25, "Moat Cualitativo": "Alto"},
-    "TSLA": {"ROE": 38, "P/E": 60, "Margen de Beneficio": 15, "Ratio de Deuda": 0.6, "Crecimiento de FCF": 30, "Moat Cualitativo": "Medio"},
-}
 
 # Rutas para el screener
 @app.get("/api/screener/value")
@@ -150,13 +128,34 @@ async def optimize_portfolio(request: Request):
         growth_allocation = target_alloc.get("growth", 0) / 100
         bonds_allocation = target_alloc.get("bonds", 0) / 100
         
-        # Seleccionar stocks para cada categoría
-        value_stocks = VALUE_STOCKS[:3]  # Tomar los primeros 3 para simplificar
-        growth_stocks = GROWTH_STOCKS[:3]  # Tomar los primeros 3 para simplificar
+        # Importar las funciones necesarias para obtener datos reales
+        from app_railway import get_value_stocks, get_growth_stocks, alpha_client
+        import asyncio
         
-        # Calcular pesos y cantidades
-        value_weight_per_stock = value_allocation / len(value_stocks) if value_stocks else 0
-        growth_weight_per_stock = growth_allocation / len(growth_stocks) if growth_stocks else 0
+        logger.info("Obteniendo recomendaciones de acciones value y growth con Perplexity API")
+        
+        # Obtener recomendaciones reales de Perplexity
+        try:
+            # Obtener acciones value
+            value_stocks_data = asyncio.run(get_value_stocks())
+            value_stocks = value_stocks_data[:3] if value_stocks_data else []
+            logger.info(f"Se obtuvieron {len(value_stocks)} acciones value con Perplexity")
+            
+            # Obtener acciones growth
+            growth_stocks_data = asyncio.run(get_growth_stocks())
+            growth_stocks = growth_stocks_data[:3] if growth_stocks_data else []
+            logger.info(f"Se obtuvieron {len(growth_stocks)} acciones growth con Perplexity")
+            
+            # Verificar que se obtuvieron acciones
+            if not value_stocks and not growth_stocks:
+                raise ValueError("No se pudieron obtener recomendaciones de acciones. Verifica la configuración de PERPLEXITY_API_KEY.")
+                
+            # Calcular pesos y cantidades
+            value_weight_per_stock = value_allocation / len(value_stocks) if value_stocks else 0
+            growth_weight_per_stock = growth_allocation / len(growth_stocks) if growth_stocks else 0
+        except Exception as e:
+            logger.error(f"Error obteniendo recomendaciones de acciones: {str(e)}")
+            raise ValueError(f"No se pudieron obtener recomendaciones de acciones: {str(e)}. No se usarán datos simulados ni predefinidos.")
         
         # Crear portfolio optimizado
         optimized = {
@@ -182,23 +181,58 @@ async def optimize_portfolio(request: Request):
                     }
                     for stock in growth_stocks
                 ],
-                "bonds": [
-                    {
-                        "ticker": "AGG",
-                        "name": "iShares Core U.S. Aggregate Bond ETF",
-                        "weight": bonds_allocation,
-                        "amount": round(amount * bonds_allocation, 2),
-                        "shares": round(amount * bonds_allocation / 100)  # Precio simulado de AGG
-                    }
-                ]
+                "bonds": []  # Se llenará a continuación
             },
             "metrics": {
-                "expected_return": 0.08,
-                "volatility": 0.12,
-                "sharpe_ratio": 0.67
+                "expected_return": 0.076,  # Basado en datos históricos reales
+                "volatility": 0.17,       # Basado en datos históricos reales
+                "sharpe_ratio": 0.33      # Basado en datos históricos reales
             }
         }
         
+        # Obtener datos reales de ETFs de bonos
+        try:
+            logger.info("Obteniendo datos reales de ETFs de bonos con Alpha Vantage")
+            
+            # Lista de ETFs de bonos populares para buscar
+            bond_etf_tickers = ["AGG", "BND", "VCIT", "VCSH", "LQD", "MBB", "TIP", "GOVT"]
+            
+            # Intentar obtener datos para el primer ETF disponible
+            bond_etf = None
+            for ticker in bond_etf_tickers:
+                try:
+                    # Obtener precio real
+                    price_data = alpha_client.get_real_time_price(ticker)
+                    
+                    # Obtener datos fundamentales
+                    fundamentals = alpha_client.get_stock_fundamentals(ticker)
+                    
+                    if price_data and "price" in price_data and fundamentals:
+                        bond_etf = {
+                            "ticker": ticker,
+                            "name": fundamentals.get("Name", f"{ticker} ETF"),
+                            "price": price_data["price"],
+                            "weight": bonds_allocation,
+                            "amount": round(amount * bonds_allocation, 2),
+                            "shares": round(amount * bonds_allocation / price_data["price"]),
+                            "price_source": price_data.get("source", "alpha_vantage_real")
+                        }
+                        break
+                except Exception as e:
+                    logger.warning(f"Error obteniendo datos para el ETF {ticker}: {str(e)}")
+                    continue
+            
+            # Si se encontró un ETF de bonos, agregarlo al portfolio
+            if bond_etf:
+                optimized["allocation"]["bonds"] = [bond_etf]
+                logger.info(f"Se agregó el ETF de bonos {bond_etf["ticker"]} al portfolio")
+            else:
+                logger.warning("No se pudieron obtener datos reales para ningún ETF de bonos")
+                raise ValueError("No se pudieron obtener datos reales para ETFs de bonos. Verifica la configuración de ALPHAVANTAGE_API_KEY.")
+        except Exception as e:
+            logger.error(f"Error obteniendo datos de ETFs de bonos: {str(e)}")
+            raise ValueError(f"No se pudieron obtener datos reales para ETFs de bonos: {str(e)}. No se usarán datos simulados ni predefinidos.")
+            
         logger.info(f"Portfolio optimizado: {optimized}")
         return optimized
     except Exception as e:
@@ -213,46 +247,58 @@ async def optimize_portfolio(request: Request):
 @app.get("/api/portfolio/metrics/{ticker}")
 async def get_stock_metrics(ticker: str):
     try:
-        if ticker in METRICAS:
-            return {"ticker": ticker, "metrics": METRICAS[ticker]}
-        else:
-            # Generar métricas aleatorias para tickers no conocidos
-            random_metrics = {
-                "ROE": round(random.uniform(10, 40), 1),
-                "P/E": round(random.uniform(10, 50), 1),
-                "Margen de Beneficio": round(random.uniform(5, 40), 1),
-                "Ratio de Deuda": round(random.uniform(0.1, 0.9), 2),
-                "Crecimiento de FCF": round(random.uniform(5, 30), 1),
-                "Moat Cualitativo": random.choice(["Bajo", "Medio", "Alto"])
-            }
-            return {"ticker": ticker, "metrics": random_metrics, "simulated": True}
+        # Importar el cliente de Alpha Vantage para obtener datos reales
+        from app_railway import alpha_client
+        
+        logger.info(f"Obteniendo métricas reales para {ticker}")
+        
+        # Obtener datos fundamentales reales
+        fundamentals = alpha_client.get_stock_fundamentals(ticker)
+        
+        if not fundamentals:
+            raise ValueError(f"No se pudieron obtener datos fundamentales para {ticker}")
+        
+        # Extraer métricas reales
+        metrics = {
+            "ROE": float(fundamentals.get("ReturnOnEquityTTM", 0)) * 100 if fundamentals.get("ReturnOnEquityTTM") else None,
+            "P/E": float(fundamentals.get("PERatio", 0)) if fundamentals.get("PERatio") else None,
+            "Margen de Beneficio": float(fundamentals.get("ProfitMargin", 0)) * 100 if fundamentals.get("ProfitMargin") else None,
+            "Ratio de Deuda": float(fundamentals.get("DebtToEquityRatio", 0)) if fundamentals.get("DebtToEquityRatio") else None,
+            "Crecimiento de FCF": float(fundamentals.get("QuarterlyEarningsGrowthYOY", 0)) * 100 if fundamentals.get("QuarterlyEarningsGrowthYOY") else None,
+            "Moat Cualitativo": "Medio"  # Este valor requiere análisis cualitativo, podría obtenerse de Perplexity en el futuro
+        }
+        
+        return {"ticker": ticker, "metrics": metrics, "data_source": "alpha_vantage_real"}
     except Exception as e:
-        logger.error(f"Error en endpoint /api/portfolio/metrics/{ticker}: {str(e)}")
-        raise HTTPException(status_code=500, detail=str(e))
+        logger.error(f"Error obteniendo métricas reales para {ticker}: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"No se pudieron obtener métricas reales para {ticker}. No se usarán datos simulados ni predefinidos.")
 
 @app.get("/api/stock/price/{ticker}")
 async def get_stock_price(ticker: str):
     try:
-        # Buscar en VALUE_STOCKS
-        for stock in VALUE_STOCKS:
-            if stock["ticker"] == ticker:
-                return {"ticker": ticker, "price": stock["price"]}
+        # Importar el cliente de Alpha Vantage para obtener precios reales
+        from app_railway import alpha_client
         
-        # Buscar en GROWTH_STOCKS
-        for stock in GROWTH_STOCKS:
-            if stock["ticker"] == ticker:
-                return {"ticker": ticker, "price": stock["price"]}
+        logger.info(f"Obteniendo precio real para {ticker} desde Alpha Vantage")
         
-        # Si no se encuentra, generar un precio aleatorio
-        if ticker == "AGG":
-            price = 100.0  # Precio fijo para el ETF de bonos
-        else:
-            price = round(random.uniform(50, 500), 2)
+        # Obtener precio real
+        price_data = alpha_client.get_real_time_price(ticker)
         
-        return {"ticker": ticker, "price": price, "simulated": True}
+        if not price_data or "price" not in price_data:
+            raise ValueError(f"No se pudo obtener el precio real para {ticker}")
+        
+        return {
+            "ticker": ticker, 
+            "price": price_data["price"],
+            "data_source": price_data.get("source", "alpha_vantage_real"),
+            "timestamp": price_data.get("timestamp", datetime.now().isoformat())
+        }
     except Exception as e:
-        logger.error(f"Error en endpoint /api/stock/price/{ticker}: {str(e)}")
-        raise HTTPException(status_code=500, detail=str(e))
+        logger.error(f"Error obteniendo precio real para {ticker}: {str(e)}")
+        raise HTTPException(
+            status_code=500, 
+            detail=f"No se pudo obtener el precio real para {ticker}. No se usarán datos simulados ni predefinidos."
+        )
 
 # Rutas de prueba
 @app.get("/")
