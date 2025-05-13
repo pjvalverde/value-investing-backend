@@ -101,7 +101,15 @@ async def startup_event():
 # Rutas para healthcheck
 @app.get("/")
 def root():
-    return {"message": "Value Investing API - Versiu00f3n 2.0", "status": "ok"}
+    # Verificar las variables de entorno cru00edticas
+    api_key = os.getenv("ALPHAVANTAGE_API_KEY")
+    api_status = "configured" if api_key else "missing"
+    return {
+        "message": "Value Investing API - Versiu00f3n 2.0", 
+        "status": "ok",
+        "api_key_status": api_status,
+        "environment": "production"
+    }
 
 @app.get("/test")
 def test():
@@ -113,7 +121,16 @@ async def real_time_price(ticker: str):
     try:
         # Verificar si el ticker existe
         logger.info(f"Obteniendo precio en tiempo real para {ticker}")
-            
+        
+        # Verificar que tengamos la API key configurada
+        api_key = os.getenv("ALPHAVANTAGE_API_KEY")
+        if not api_key:
+            logger.error("ALPHAVANTAGE_API_KEY no configurada")
+            return JSONResponse(
+                status_code=500,
+                content={"detail": "API_KEY de Alpha Vantage no configurada en el servidor"}
+            )
+        
         # Usar el servicio de Alpha Vantage para obtener el precio en tiempo real
         price_data = alpha_vantage_client.get_real_time_price(ticker)
         
@@ -121,15 +138,15 @@ async def real_time_price(ticker: str):
         if not price_data or "price" not in price_data:
             return JSONResponse(
                 status_code=404,
-                content={"error": f"No se pudo obtener el precio en tiempo real para {ticker}"}
+                content={"detail": f"No se encontraron datos para {ticker}"}
             )
-            
+        
         return price_data
     except Exception as e:
-        logger.error(f"Error obteniendo precio en tiempo real para {ticker}: {str(e)}")
+        logger.error(f"Error obteniendo precio para {ticker}: {str(e)}")
         return JSONResponse(
             status_code=500,
-            content={"error": f"Error obteniendo precio para {ticker}", "details": str(e)}
+            content={"detail": f"Error al obtener datos: {str(e)}"}
         )
 
 # Endpoint para obtener datos históricos de precios
