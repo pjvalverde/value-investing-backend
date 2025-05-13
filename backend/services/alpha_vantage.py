@@ -57,7 +57,7 @@ class AlphaVantageClient:
         """Make a request to Alpha Vantage API with caching and error handling"""
         if not self.api_key:
             logger.error("Alpha Vantage API key not configured")
-            raise ValueError("Alpha Vantage API key not configured")
+            raise ValueError("Alpha Vantage API key not configured. Please set the ALPHAVANTAGE_API_KEY environment variable.")
         
         # Check cache first if cache_key provided
         if cache_key:
@@ -102,7 +102,7 @@ class AlphaVantageClient:
             raise
     
     def get_real_time_price(self, ticker: str) -> Dict[str, Any]:
-        """Get real-time price for a ticker with fallback mechanisms"""
+        """Get real-time price for a ticker without fallback to simulated data"""
         cache_key = f"price_{ticker}"
         
         # Try to get from cache first (short expiry for prices)
@@ -110,14 +110,7 @@ class AlphaVantageClient:
         if cached_data:
             return cached_data
         
-        # Common prices as fallback
-        common_prices = {
-            "AAPL": 175.34, "MSFT": 402.78, "JNJ": 147.56, "V": 275.96, "JPM": 198.47,
-            "VOO": 470.15, "QQQ": 438.27, "SPY": 468.32, "VTI": 252.18, "AGG": 108.45,
-            "BND": 72.36, "T-BILL": 100.00
-        }
-        
-        # Try different endpoints with fallback
+        # Try different endpoints
         for attempt, (function, result_key, price_key) in enumerate([
             ("GLOBAL_QUOTE", "Global Quote", "05. price"),
             ("TIME_SERIES_DAILY", "Time Series (Daily)", "4. close")
@@ -147,217 +140,123 @@ class AlphaVantageClient:
             except Exception as e:
                 logger.warning(f"Attempt {attempt+1} failed for {ticker}: {str(e)}")
         
-        # Fallback to predefined prices
-        if ticker in common_prices:
-            price = common_prices[ticker]
-            logger.info(f"Using predefined price for {ticker}: ${price}")
-            result = {"ticker": ticker, "price": price, "source": "PREDEFINED"}
-            self._store_in_cache(cache_key, result, expiry_minutes=30)  # Longer cache for fallback
-            return result
-        
-        # Last resort: simulate a price
-        if ticker.startswith("T-") or "BOND" in ticker.upper() or ticker == "AGG" or ticker == "BND":
-            # For bonds and bond ETFs
-            simulated_price = round(random.uniform(95, 105), 2)
-        elif any(etf in ticker for etf in ["VOO", "SPY", "QQQ", "VTI", "IVV"]):
-            # For major ETFs
-            simulated_price = round(random.uniform(200, 500), 2)
-        else:
-            # For stocks
-            simulated_price = round(random.uniform(100, 400), 2)
-        
-        logger.warning(f"Using simulated price for {ticker}: ${simulated_price}")
-        result = {"ticker": ticker, "price": simulated_price, "simulated": True}
-        self._store_in_cache(cache_key, result, expiry_minutes=60)  # Longer cache for simulated
-        return result
+        # If we reach here, no valid data was found
+        error_msg = f"Could not retrieve real-time price data for {ticker} from Alpha Vantage API"
+        logger.error(error_msg)
+        raise ValueError(error_msg)
     
     def get_historical_prices(self, ticker: str, period: str = "1year") -> Dict[str, Any]:
-        """Get historical price data for a ticker"""
+        """Get historical price data for a ticker without fallback to simulated data"""
         cache_key = f"historical_{ticker}_{period}"
         cached_data = self._get_from_cache(cache_key)
         if cached_data:
             return cached_data
         
-        try:
-            # Map period to appropriate function and parameters
-            if period == "5years":
-                function = "TIME_SERIES_MONTHLY"
-                output_size = "full"
-                result_key = "Monthly Time Series"
-            elif period == "1year":
-                function = "TIME_SERIES_WEEKLY"
-                output_size = "compact"
-                result_key = "Weekly Time Series"
-            elif period == "3months":
-                function = "TIME_SERIES_DAILY"
-                output_size = "compact"
-                result_key = "Time Series (Daily)"
-            else:
-                function = "TIME_SERIES_DAILY"
-                output_size = "compact"
-                result_key = "Time Series (Daily)"
+        # Map period to appropriate function and parameters
+        if period == "5years":
+            function = "TIME_SERIES_MONTHLY"
+            output_size = "full"
+            result_key = "Monthly Time Series"
+        elif period == "1year":
+            function = "TIME_SERIES_WEEKLY"
+            output_size = "compact"
+            result_key = "Weekly Time Series"
+        elif period == "3months":
+            function = "TIME_SERIES_DAILY"
+            output_size = "compact"
+            result_key = "Time Series (Daily)"
+        else:
+            function = "TIME_SERIES_DAILY"
+            output_size = "compact"
+            result_key = "Time Series (Daily)"
+        
+        params = {
+            "function": function,
+            "symbol": ticker,
+            "outputsize": output_size
+        }
+        
+        data = self._make_request(params)
+        
+        if result_key in data:
+            # Process the time series data
+            time_series = data[result_key]
+            processed_data = []
             
-            params = {
-                "function": function,
-                "symbol": ticker,
-                "outputsize": output_size
+            for date, values in time_series.items():
+                processed_data.append({
+                    "date": date,
+                    "open": float(values.get("1. open", 0)),
+                    "high": float(values.get("2. high", 0)),
+                    "low": float(values.get("3. low", 0)),
+                    "close": float(values.get("4. close", 0)),
+                    "volume": int(values.get("5. volume", 0))
+                })
+            
+            # Sort by date
+            processed_data.sort(key=lambda x: x["date"])
+            
+            result = {
+                "ticker": ticker,
+                "period": period,
+                "data": processed_data
             }
             
-            data = self._make_request(params)
-            
-            if result_key in data:
-                # Process the time series data
-                time_series = data[result_key]
-                processed_data = []
-                
-                for date, values in time_series.items():
-                    processed_data.append({
-                        "date": date,
-                        "open": float(values.get("1. open", 0)),
-                        "high": float(values.get("2. high", 0)),
-                        "low": float(values.get("3. low", 0)),
-                        "close": float(values.get("4. close", 0)),
-                        "volume": int(values.get("5. volume", 0))
-                    })
-                
-                # Sort by date
-                processed_data.sort(key=lambda x: x["date"])
-                
-                result = {
-                    "ticker": ticker,
-                    "period": period,
-                    "data": processed_data
-                }
-                
-                # Cache for longer period since historical data doesn't change frequently
-                self._store_in_cache(cache_key, result, expiry_minutes=240)  # 4 hours
-                return result
-            
-            raise ValueError(f"No {result_key} data found in response")
-            
-        except Exception as e:
-            logger.error(f"Error getting historical prices for {ticker}: {str(e)}")
-            # Fallback to simulated data
-            return self._generate_simulated_historical_data(ticker, period)
-    
-    def _generate_simulated_historical_data(self, ticker: str, period: str) -> Dict[str, Any]:
-        """Generate simulated historical price data as a fallback"""
-        logger.warning(f"Generating simulated historical data for {ticker}")
+            # Cache for longer period since historical data doesn't change frequently
+            self._store_in_cache(cache_key, result, expiry_minutes=240)  # 4 hours
+            return result
         
-        # Determine number of data points based on period
-        if period == "5years":
-            num_points = 60  # Monthly for 5 years
-            days_delta = 30
-        elif period == "1year":
-            num_points = 52  # Weekly for 1 year
-            days_delta = 7
-        elif period == "3months":
-            num_points = 90  # Daily for 3 months
-            days_delta = 1
-        else:
-            num_points = 30  # Default: daily for 1 month
-            days_delta = 1
-        
-        # Base price depends on ticker type
-        if ticker.startswith("T-") or "BOND" in ticker.upper() or ticker == "AGG" or ticker == "BND":
-            base_price = 100.0
-            volatility = 0.01  # Low volatility for bonds
-        elif any(etf in ticker for etf in ["VOO", "SPY", "QQQ", "VTI", "IVV"]):
-            base_price = 350.0
-            volatility = 0.015  # Medium volatility for ETFs
-        else:
-            base_price = 200.0
-            volatility = 0.025  # Higher volatility for stocks
-        
-        # Generate time series
-        end_date = datetime.now()
-        processed_data = []
-        
-        current_price = base_price
-        for i in range(num_points):
-            date = end_date - timedelta(days=i * days_delta)
-            date_str = date.strftime("%Y-%m-%d")
-            
-            # Random daily change with trend
-            daily_change = random.normalvariate(0.0002, volatility)  # Slight upward bias
-            current_price *= (1 + daily_change)
-            
-            # Generate OHLC data
-            daily_volatility = current_price * volatility * 0.5
-            open_price = current_price * (1 + random.uniform(-0.005, 0.005))
-            high_price = max(open_price, current_price) * (1 + random.uniform(0.001, 0.01))
-            low_price = min(open_price, current_price) * (1 - random.uniform(0.001, 0.01))
-            
-            processed_data.append({
-                "date": date_str,
-                "open": round(open_price, 2),
-                "high": round(high_price, 2),
-                "low": round(low_price, 2),
-                "close": round(current_price, 2),
-                "volume": int(random.uniform(1000000, 10000000))
-            })
-        
-        # Sort by date (ascending)
-        processed_data.sort(key=lambda x: x["date"])
-        
-        return {
-            "ticker": ticker,
-            "period": period,
-            "data": processed_data,
-            "simulated": True
-        }
+        error_msg = f"No {result_key} data found in response for {ticker}"
+        logger.error(error_msg)
+        raise ValueError(error_msg)
     
     def get_stock_fundamentals(self, ticker: str) -> Dict[str, Any]:
-        """Get fundamental data for a stock"""
+        """Get fundamental data for a stock without fallback to simulated data"""
         cache_key = f"fundamentals_{ticker}"
         cached_data = self._get_from_cache(cache_key)
         if cached_data:
             return cached_data
         
-        try:
-            # Try to get overview data
-            params = {
-                "function": "OVERVIEW",
-                "symbol": ticker
+        # Try to get overview data
+        params = {
+            "function": "OVERVIEW",
+            "symbol": ticker
+        }
+        
+        data = self._make_request(params)
+        
+        if "Symbol" in data and data["Symbol"] == ticker:
+            # Process the fundamental data
+            fundamentals = {
+                "ticker": ticker,
+                "name": data.get("Name", ""),
+                "sector": data.get("Sector", ""),
+                "industry": data.get("Industry", ""),
+                "metrics": {
+                    "ROE": self._parse_percentage(data.get("ReturnOnEquityTTM", "0")),
+                    "P/E": float(data.get("PERatio", 0)) if data.get("PERatio") else None,
+                    "Margen de Beneficio": self._parse_percentage(data.get("ProfitMargin", "0")),
+                    "Ratio de Deuda": float(data.get("DebtToEquity", "0")) / 100 if data.get("DebtToEquity") else None,
+                    "Crecimiento de FCF": None,  # Not directly available
+                    "Moat Cualitativo": self._determine_moat(data)
+                },
+                "additional": {
+                    "MarketCap": data.get("MarketCapitalization"),
+                    "Beta": data.get("Beta"),
+                    "DividendYield": data.get("DividendYield"),
+                    "EPS": data.get("EPS"),
+                    "52WeekHigh": data.get("52WeekHigh"),
+                    "52WeekLow": data.get("52WeekLow")
+                }
             }
             
-            data = self._make_request(params)
-            
-            if "Symbol" in data and data["Symbol"] == ticker:
-                # Process the fundamental data
-                fundamentals = {
-                    "ticker": ticker,
-                    "name": data.get("Name", ""),
-                    "sector": data.get("Sector", ""),
-                    "industry": data.get("Industry", ""),
-                    "metrics": {
-                        "ROE": self._parse_percentage(data.get("ReturnOnEquityTTM", "0")),
-                        "P/E": float(data.get("PERatio", 0)) if data.get("PERatio") else None,
-                        "Margen de Beneficio": self._parse_percentage(data.get("ProfitMargin", "0")),
-                        "Ratio de Deuda": float(data.get("DebtToEquity", "0")) / 100 if data.get("DebtToEquity") else None,
-                        "Crecimiento de FCF": None,  # Not directly available
-                        "Moat Cualitativo": self._determine_moat(data)
-                    },
-                    "additional": {
-                        "MarketCap": data.get("MarketCapitalization"),
-                        "Beta": data.get("Beta"),
-                        "DividendYield": data.get("DividendYield"),
-                        "EPS": data.get("EPS"),
-                        "52WeekHigh": data.get("52WeekHigh"),
-                        "52WeekLow": data.get("52WeekLow")
-                    }
-                }
-                
-                # Cache for a longer period since fundamentals don't change frequently
-                self._store_in_cache(cache_key, fundamentals, expiry_minutes=1440)  # 24 hours
-                return fundamentals
-            
-            raise ValueError(f"No fundamental data found for {ticker}")
-            
-        except Exception as e:
-            logger.error(f"Error getting fundamentals for {ticker}: {str(e)}")
-            # Fallback to simulated data
-            return self._generate_simulated_fundamentals(ticker)
+            # Cache for a longer period since fundamentals don't change frequently
+            self._store_in_cache(cache_key, fundamentals, expiry_minutes=1440)  # 24 hours
+            return fundamentals
+        
+        error_msg = f"No fundamental data found for {ticker}"
+        logger.error(error_msg)
+        raise ValueError(error_msg)
     
     def _parse_percentage(self, value_str: str) -> Optional[float]:
         """Parse percentage values from Alpha Vantage"""
@@ -383,105 +282,6 @@ class AlphaVantageClient:
                 return "Bajo"
         except Exception:
             return "Desconocido"
-    
-    def _generate_simulated_fundamentals(self, ticker: str) -> Dict[str, Any]:
-        """Generate simulated fundamental data as a fallback"""
-        logger.warning(f"Generating simulated fundamental data for {ticker}")
-        
-        # Predefined fundamentals for common stocks
-        predefined = {
-            "AAPL": {"name": "Apple Inc.", "sector": "Technology", "ROE": 30, "P/E": 28, "Margen de Beneficio": 23, "Ratio de Deuda": 0.5, "Moat": "Alto"},
-            "MSFT": {"name": "Microsoft Corp.", "sector": "Technology", "ROE": 35, "P/E": 32, "Margen de Beneficio": 31, "Ratio de Deuda": 0.4, "Moat": "Alto"},
-            "JNJ": {"name": "Johnson & Johnson", "sector": "Healthcare", "ROE": 25, "P/E": 18, "Margen de Beneficio": 20, "Ratio de Deuda": 0.3, "Moat": "Medio"},
-            "V": {"name": "Visa Inc.", "sector": "Financial Services", "ROE": 40, "P/E": 34, "Margen de Beneficio": 51, "Ratio de Deuda": 0.5, "Moat": "Alto"},
-            "JPM": {"name": "JPMorgan Chase", "sector": "Financial Services", "ROE": 18, "P/E": 12, "Margen de Beneficio": 25, "Ratio de Deuda": 0.8, "Moat": "Medio"},
-            "VOO": {"name": "Vanguard S&P 500 ETF", "sector": "ETF", "ROE": 16, "P/E": 22, "Margen de Beneficio": 18, "Ratio de Deuda": 0.4, "Moat": "Diversificado"},
-            "QQQ": {"name": "Invesco QQQ Trust", "sector": "ETF", "ROE": 18, "P/E": 25, "Margen de Beneficio": 20, "Ratio de Deuda": 0.5, "Moat": "Diversificado"},
-            "SPY": {"name": "SPDR S&P 500 ETF", "sector": "ETF", "ROE": 15, "P/E": 21, "Margen de Beneficio": 17, "Ratio de Deuda": 0.4, "Moat": "Diversificado"},
-            "AGG": {"name": "iShares Core U.S. Aggregate Bond ETF", "sector": "ETF", "ROE": None, "P/E": None, "Margen de Beneficio": None, "Ratio de Deuda": None, "Moat": "Diversificado"}
-        }
-        
-        if ticker in predefined:
-            data = predefined[ticker]
-            fundamentals = {
-                "ticker": ticker,
-                "name": data["name"],
-                "sector": data["sector"],
-                "industry": "Simulated",
-                "metrics": {
-                    "ROE": data["ROE"],
-                    "P/E": data["P/E"],
-                    "Margen de Beneficio": data["Margen de Beneficio"],
-                    "Ratio de Deuda": data["Ratio de Deuda"],
-                    "Crecimiento de FCF": round(random.uniform(5, 20), 1),
-                    "Moat Cualitativo": data["Moat"]
-                },
-                "additional": {
-                    "MarketCap": str(int(random.uniform(50000000000, 2000000000000))),
-                    "Beta": str(round(random.uniform(0.8, 1.5), 2)),
-                    "DividendYield": str(round(random.uniform(0.5, 3.5), 2)),
-                    "EPS": str(round(random.uniform(1, 15), 2)),
-                    "52WeekHigh": str(round(random.uniform(100, 500), 2)),
-                    "52WeekLow": str(round(random.uniform(50, 300), 2))
-                },
-                "simulated": True
-            }
-        else:
-            # Generate random data for unknown tickers
-            if ticker.startswith("T-") or "BOND" in ticker.upper() or ticker == "AGG" or ticker == "BND":
-                # For bonds
-                sector = "Fixed Income"
-                metrics = {
-                    "ROE": None,
-                    "P/E": None,
-                    "Margen de Beneficio": None,
-                    "Ratio de Deuda": None,
-                    "Crecimiento de FCF": None,
-                    "Moat Cualitativo": None
-                }
-            elif any(etf in ticker for etf in ["VOO", "SPY", "QQQ", "VTI", "IVV"]):
-                # For ETFs
-                sector = "ETF"
-                metrics = {
-                    "ROE": round(random.uniform(10, 20), 1),
-                    "P/E": round(random.uniform(15, 25), 1),
-                    "Margen de Beneficio": round(random.uniform(10, 25), 1),
-                    "Ratio de Deuda": round(random.uniform(0.3, 0.6), 2),
-                    "Crecimiento de FCF": round(random.uniform(5, 15), 1),
-                    "Moat Cualitativo": "Diversificado"
-                }
-            else:
-                # For stocks
-                sector = random.choice(["Technology", "Healthcare", "Financial Services", "Consumer Cyclical", "Industrials"])
-                metrics = {
-                    "ROE": round(random.uniform(10, 40), 1),
-                    "P/E": round(random.uniform(10, 50), 1),
-                    "Margen de Beneficio": round(random.uniform(5, 40), 1),
-                    "Ratio de Deuda": round(random.uniform(0.1, 0.9), 2),
-                    "Crecimiento de FCF": round(random.uniform(5, 30), 1),
-                    "Moat Cualitativo": random.choice(["Bajo", "Medio", "Alto"])
-                }
-            
-            fundamentals = {
-                "ticker": ticker,
-                "name": f"{ticker} Corporation",
-                "sector": sector,
-                "industry": "Simulated",
-                "metrics": metrics,
-                "additional": {
-                    "MarketCap": str(int(random.uniform(1000000000, 500000000000))),
-                    "Beta": str(round(random.uniform(0.5, 2.0), 2)),
-                    "DividendYield": str(round(random.uniform(0, 5), 2)),
-                    "EPS": str(round(random.uniform(0.5, 10), 2)),
-                    "52WeekHigh": str(round(random.uniform(50, 400), 2)),
-                    "52WeekLow": str(round(random.uniform(30, 300), 2))
-                },
-                "simulated": True
-            }
-        
-        # Cache for a shorter period since it's simulated
-        self._store_in_cache(f"fundamentals_{ticker}", fundamentals, expiry_minutes=720)  # 12 hours
-        return fundamentals
 
 # Create a singleton instance
 alpha_vantage_client = AlphaVantageClient()
