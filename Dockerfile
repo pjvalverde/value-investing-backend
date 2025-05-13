@@ -15,4 +15,4 @@ COPY . .
 EXPOSE 8000
 
 # Comando para ejecutar la aplicaciu00f3n
-CMD ["python", "app_direct.py"]
+CMD ["uvicorn", "app_direct:app", "--host", "0.0.0.0", "--port", "8000"]
