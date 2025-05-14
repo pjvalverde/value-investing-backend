@@ -79,6 +79,90 @@ async def get_growth_screener(min_growth: float = 0.20, region: str = "US,EU"):
         raise HTTPException(status_code=500, detail=str(e))
 
 # Rutas para portfolios
+
+@app.post("/api/portfolio/recommend")
+async def recommend_portfolio(request: Request):
+    """
+    Endpoint para recomendar un portafolio basado en perfil de riesgo e horizonte de inversión.
+    Body:
+    - risk_profile: "conservative", "balanced", "aggressive"
+    - investment_horizon: "short", "medium", "long"
+    Returns:
+    - portfolio: recomendaciones de acciones y asignaciones sugeridas
+    - justifications: explicación de la composición
+    - expected_performance: retornos y volatilidad estimados
+    """
+    try:
+        data = await request.json()
+        risk_profile = data.get("risk_profile", "balanced")
+        investment_horizon = data.get("investment_horizon", "medium")
+
+        # Importar servicio de portafolio y Perplexity
+        from backend.services.portfolio_service import portfolio_service
+        import asyncio
+
+        # Lógica de asignación base según perfil de riesgo
+        alloc_map = {
+            "conservative": {"value": 50, "growth": 20, "bonds": 30},
+            "balanced": {"value": 40, "growth": 40, "bonds": 20},
+            "aggressive": {"value": 25, "growth": 65, "bonds": 10}
+        }
+        target_alloc = alloc_map.get(risk_profile, alloc_map["balanced"])
+
+        # Ajustar según horizonte (más largo = más growth, menos bonds)
+        if investment_horizon == "long":
+            target_alloc["growth"] += 10
+            target_alloc["bonds"] -= 10
+        elif investment_horizon == "short":
+            target_alloc["bonds"] += 10
+            target_alloc["growth"] -= 10
+
+        # Normalizar si algún valor sale de rango
+        total = sum(target_alloc.values())
+        for k in target_alloc:
+            target_alloc[k] = max(0, min(100, int(target_alloc[k] * 100 / total)))
+
+        # Obtener recomendaciones de acciones usando Perplexity API (growth y value)
+        value_stocks = portfolio_service._get_value_stocks(3)
+        growth_stocks = portfolio_service._get_growth_stocks(3)
+        bond_etfs = portfolio_service._get_bond_etfs(1)
+
+        # Construir la estructura del portafolio recomendado
+        portfolio = {
+            "value": value_stocks,
+            "growth": growth_stocks,
+            "bonds": bond_etfs
+        }
+
+        # Calcular métricas estimadas (usando lógica interna)
+        metrics = portfolio_service._calculate_portfolio_metrics(
+            [dict(weight=target_alloc['value']/100, **s) for s in value_stocks],
+            [dict(weight=target_alloc['growth']/100, **s) for s in growth_stocks],
+            [dict(weight=target_alloc['bonds']/100, **s) for s in bond_etfs]
+        )
+
+        # Justificación de la composición
+        justifications = {
+            "value": "Acciones seleccionadas por criterios de value investing con potencial de revalorización y baja valoración relativa.",
+            "growth": "Empresas de alto crecimiento, usualmente small/micro caps, con fuerte momentum de ingresos y beneficios.",
+            "bonds": "ETFs de bonos para diversificación y reducción de volatilidad, ajustados al perfil de riesgo."
+        }
+
+        return {
+            "portfolio": portfolio,
+            "target_alloc": target_alloc,
+            "justifications": justifications,
+            "expected_performance": metrics
+        }
+    except Exception as e:
+        logger.error(f"Error en endpoint /api/portfolio/recommend: {str(e)}")
+        import traceback
+        logger.error(traceback.format_exc())
+        return JSONResponse(
+            status_code=500,
+            content={"error": "No se pudo generar la recomendación de portafolio", "details": str(e)}
+        )
+
 @app.post("/api/portfolio/create")
 async def create_portfolio(request: Request):
     try:
@@ -301,6 +385,16 @@ async def get_stock_price(ticker: str):
         )
 
 # Rutas de prueba
+
+@app.get("/api/env/perplexity")
+def check_perplexity_key():
+    import os
+    key = os.getenv("PERPLEXITY_API_KEY")
+    if key:
+        return {"perplexity_api_key_loaded": True, "length": len(key)}
+    else:
+        return {"perplexity_api_key_loaded": False}
+
 @app.get("/")
 def root():
     return {"message": "Value Investing API - Versión 2.0"}
