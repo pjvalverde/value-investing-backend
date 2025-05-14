@@ -20,13 +20,7 @@ logger = logging.getLogger("value-investing-api")
 # Crear la aplicación FastAPI
 app = FastAPI(title="Value Investing API", description="API para el sistema de Value Investing")
 
-@app.get("/test")
-def test():
-    return {"status": "ok", "message": "API funcionando correctamente"}
 
-@app.get("/test")
-def test():
-    return {"status": "ok", "message": "API funcionando correctamente"}
 
 @app.get("/api/env/perplexity")
 def check_perplexity_key():
