@@ -4,7 +4,7 @@
 
 [deploy]
   buildCommand = "pip install -r requirements.txt"
-  healthcheckPath = "/test"
+  healthcheckPath = "/"
   healthcheckTimeout = 100
   restartPolicyType = "on_failure"
   # Eliminado startCommand para permitir configuración manual en Railway
