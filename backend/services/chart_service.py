@@ -20,24 +20,24 @@ class ChartService:
     
     def get_price_chart_data(self, ticker: str, period: str = "1year") -> Dict[str, Any]:
         """Get price chart data for a ticker"""
-            # Get historical prices from Alpha Vantage client
-            historical_data = alpha_vantage_client.get_historical_prices(ticker, period)
-            
-            # Extract data for chart
-            dates = [item["date"] for item in historical_data["data"]]
-            prices = [item["close"] for item in historical_data["data"]]
-            
-            # Calculate moving averages if we have enough data
-            sma_50 = self._calculate_sma(prices, 50) if len(prices) >= 50 else None
-            sma_200 = self._calculate_sma(prices, 200) if len(prices) >= 200 else None
-            
-            # Calculate performance metrics
-            performance = self._calculate_performance(prices)
-            
-            return {
-                "ticker": ticker,
-                "period": period,
-                "dates": dates,
+        # Get historical prices from Alpha Vantage client
+        historical_data = alpha_vantage_client.get_historical_prices(ticker, period)
+        
+        # Extract data for chart
+        dates = [item["date"] for item in historical_data["data"]]
+        prices = [item["close"] for item in historical_data["data"]]
+        
+        # Calculate moving averages if we have enough data
+        sma_50 = self._calculate_sma(prices, 50) if len(prices) >= 50 else None
+        sma_200 = self._calculate_sma(prices, 200) if len(prices) >= 200 else None
+        
+        # Calculate performance metrics
+        performance = self._calculate_performance(prices)
+        
+        return {
+            "ticker": ticker,
+            "period": period,
+            "dates": dates,
                 "prices": prices,
                 "sma_50": sma_50,
                 "sma_200": sma_200,
@@ -96,19 +96,19 @@ class ChartService:
             "performance": {}
         }
         
-            # Get data for each ticker
-            ticker_data = {}
-            common_dates = None
+        # Get data for each ticker
+        ticker_data = {}
+        common_dates = None
+        
+        for ticker in tickers:
+            chart_data = self.get_price_chart_data(ticker, period)
+            ticker_data[ticker] = chart_data
             
-            for ticker in tickers:
-                chart_data = self.get_price_chart_data(ticker, period)
-                ticker_data[ticker] = chart_data
-                
-                # Find common dates across all tickers
-                if common_dates is None:
-                    common_dates = set(chart_data["dates"])
-                else:
-                    common_dates = common_dates.intersection(set(chart_data["dates"]))
+            # Find common dates across all tickers
+            if common_dates is None:
+                common_dates = set(chart_data["dates"])
+            else:
+                common_dates = common_dates.intersection(set(chart_data["dates"]))
             
             # Convert back to sorted list
             common_dates = sorted(list(common_dates))
@@ -142,24 +142,24 @@ class ChartService:
     
     def get_portfolio_performance_chart(self, portfolio_data: Dict[str, Any], period: str = "1year") -> Dict[str, Any]:
         """Generate portfolio performance chart based on allocation"""
-            # Extract tickers and weights from portfolio
-            tickers = []
-            weights = []
-            
-            # Process value stocks
-            for stock in portfolio_data.get("allocation", {}).get("value", []):
-                tickers.append(stock["ticker"])
-                weights.append(stock["weight"])
-            
-            # Process growth stocks
-            for stock in portfolio_data.get("allocation", {}).get("growth", []):
-                tickers.append(stock["ticker"])
-                weights.append(stock["weight"])
-            
-            # Process bonds
-            for bond in portfolio_data.get("allocation", {}).get("bonds", []):
-                tickers.append(bond["ticker"])
-                weights.append(bond["weight"])
+        # Extract tickers and weights from portfolio
+        tickers = []
+        weights = []
+        
+        # Process value stocks
+        for stock in portfolio_data.get("allocation", {}).get("value", []):
+            tickers.append(stock["ticker"])
+            weights.append(stock["weight"])
+        
+        # Process growth stocks
+        for stock in portfolio_data.get("allocation", {}).get("growth", []):
+            tickers.append(stock["ticker"])
+            weights.append(stock["weight"])
+        
+        # Process bonds
+        for bond in portfolio_data.get("allocation", {}).get("bonds", []):
+            tickers.append(bond["ticker"])
+            weights.append(bond["weight"])
             
             # Get comparative data for all tickers
             comparative_data = self.get_comparative_chart_data(tickers, period)
