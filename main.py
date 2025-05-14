@@ -22,7 +22,16 @@ app = FastAPI(title="Value Investing API", description="API para el sistema de V
 
 @app.get("/test")
 def test():
-    return {"ok": True}
+    return {"status": "ok", "message": "API funcionando correctamente"}
+
+@app.get("/api/env/perplexity")
+def check_perplexity_key():
+    import os
+    key = os.getenv("PERPLEXITY_API_KEY")
+    if key:
+        return {"perplexity_api_key_loaded": True, "length": len(key)}
+    else:
+        return {"perplexity_api_key_loaded": False}
 
 
 # Permitir acceso desde el frontend React - Configuración explícita de CORS
