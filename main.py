@@ -20,6 +20,11 @@ logger = logging.getLogger("value-investing-api")
 # Crear la aplicación FastAPI
 app = FastAPI(title="Value Investing API", description="API para el sistema de Value Investing")
 
+@app.get("/test")
+def test():
+    return {"ok": True}
+
+
 # Permitir acceso desde el frontend React - Configuración explícita de CORS
 origins = [
     "http://localhost:3000",
