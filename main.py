@@ -60,6 +60,15 @@ async def log_requests(request: Request, call_next):
 VALUE_STOCKS = []
 GROWTH_STOCKS = []
 
+# Endpoint para verificar la variable de entorno PERPLEXITY_API_KEY
+@app.get("/api/env/perplexity")
+def check_perplexity_key():
+    key = os.getenv("PERPLEXITY_API_KEY")
+    if key:
+        return {"perplexity_api_key_loaded": True, "length": len(key)}
+    else:
+        return {"perplexity_api_key_loaded": False}
+
 
 # Rutas para el screener
 @app.get("/api/screener/value")
