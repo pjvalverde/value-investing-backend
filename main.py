@@ -56,6 +56,10 @@ async def log_requests(request: Request, call_next):
 # No se utilizan datos simulados ni predefinidos
 # Todos los datos deben obtenerse en tiempo real de Perplexity API o Alpha Vantage
 
+# DEFINICIONES DUMMY para evitar errores de importación
+VALUE_STOCKS = []
+GROWTH_STOCKS = []
+
 
 # Rutas para el screener
 @app.get("/api/screener/value")
