@@ -18,4 +18,4 @@ ENV PORT=${PORT}
 EXPOSE ${PORT}
 
 # Comando para ejecutar la aplicaciu00f3n
-CMD python app_railway.py
+CMD ["uvicorn", "main:app", "--host", "0.0.0.0", "--port", "8000"]
