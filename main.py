@@ -336,7 +336,7 @@ async def optimize_portfolio(request: Request):
             # Si se encontró un ETF de bonos, agregarlo al portfolio
             if bond_etf:
                 optimized["allocation"]["bonds"] = [bond_etf]
-                logger.info(f"Se agregó el ETF de bonos {bond_etf["ticker"]} al portfolio")
+                logger.info(f"Se agregó el ETF de bonos {bond_etf['ticker']} al portfolio")
             else:
                 logger.warning("No se pudieron obtener datos reales para ningún ETF de bonos")
                 raise ValueError("No se pudieron obtener datos reales para ETFs de bonos. Verifica la configuración de ALPHAVANTAGE_API_KEY.")
