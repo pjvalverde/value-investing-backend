@@ -33,21 +33,12 @@ def check_perplexity_key():
 
 
 # Permitir acceso desde el frontend React - Configuración explícita de CORS
-origins = [
-    "http://localhost:3000",
-    "http://localhost:3001",
-    "https://pjvalverde.github.io",
-    "*"  # Permitir cualquier origen en desarrollo
-]
-
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=origins,
+    allow_origins=["*"],  # Permitir cualquier origen
     allow_credentials=True,
-    allow_methods=["GET", "POST", "PUT", "DELETE", "OPTIONS"],
-    allow_headers=["Content-Type", "Authorization", "Accept"],
-    expose_headers=["Content-Type"],
-    max_age=600,  # 10 minutos
+    allow_methods=["*"],
+    allow_headers=["*"],
 )
 
 # Agregar middleware para loguear todas las solicitudes
