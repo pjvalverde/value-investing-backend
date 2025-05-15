@@ -17,6 +17,9 @@ logging.basicConfig(
 )
 logger = logging.getLogger("value-investing-api")
 
+from improved_alpha_service import ImprovedAlphaVantageClient
+alpha_client = ImprovedAlphaVantageClient()
+
 # Crear la aplicación FastAPI
 app = FastAPI(title="Value Investing API", description="API para el sistema de Value Investing")
 
@@ -348,7 +351,7 @@ async def optimize_portfolio(request: Request):
 async def get_stock_metrics(ticker: str):
     try:
         # Importar el cliente de Alpha Vantage para obtener datos reales
-        from app_railway import alpha_client
+
         
         logger.info(f"Obteniendo métricas reales para {ticker}")
         
@@ -377,7 +380,7 @@ async def get_stock_metrics(ticker: str):
 async def get_stock_price(ticker: str):
     try:
         # Importar el cliente de Alpha Vantage para obtener precios reales
-        from app_railway import alpha_client
+
         
         logger.info(f"Obteniendo precio real para {ticker} desde Alpha Vantage")
         
