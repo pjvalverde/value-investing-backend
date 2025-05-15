@@ -10,6 +10,13 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 from typing import List, Dict, Any, Optional
 
+# Verificar y loguear si las API keys están presentes
+perplexity_key = os.getenv("PERPLEXITY_API_KEY")
+claude_key = os.getenv("CLAUDE_API_KEY")
+logging.basicConfig(level=logging.INFO)
+logging.info(f"PERPLEXITY_API_KEY: {'OK (' + perplexity_key[:5] + '...)' if perplexity_key else 'NO CONFIGURADA'}")
+logging.info(f"CLAUDE_API_KEY: {'OK (' + claude_key[:5] + '...)' if claude_key else 'NO CONFIGURADA'}")
+
 # Configurar logging
 logging.basicConfig(
     level=logging.INFO,
