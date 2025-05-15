@@ -231,6 +231,7 @@ async def create_portfolio(request: Request):
             "user_id": user_id,
             "target_alloc": target_alloc,
             "created_at": datetime.now().isoformat()
+        }
 
 @app.post("/api/portfolio/optimize")
 async def optimize_portfolio(request: Request):
