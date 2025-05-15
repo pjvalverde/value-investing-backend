@@ -356,6 +356,8 @@ async def optimize_portfolio(request: Request):
             status_code=500,
             content={"error": "Error al optimizar portfolio (solo Perplexity)", "details": str(e)}
         )
+    finally:
+        pass
 
 # ... (rest of the code remains the same)
     uvicorn.run("main:app", host="0.0.0.0", port=port)
