@@ -263,8 +263,12 @@ async def optimize_portfolio(request: Request):
         value_allocation = target_alloc.get("value", 0) / 100
 
         # Llamar a Perplexity para obtener el portafolio growth
-        perplexity_client = PerplexityClient()
         try:
+            import os
+            api_key = os.getenv("PERPLEXITY_API_KEY")
+            logger.info(f"[DEBUG] Usando PERPLEXITY_API_KEY: {api_key[:5]}..." if api_key else "[DEBUG] PERPLEXITY_API_KEY no está configurada")
+            logger.info(f"[DEBUG] Parámetros enviados a Perplexity growth: amount={amount * growth_allocation}, min_marketcap_eur=300_000_000, max_marketcap_eur=2_000_000_000, min_beta=1.2, max_beta=1.4, n_stocks=10, region='EU,US'")
+            perplexity_client = PerplexityClient()
             growth_stocks = perplexity_client.get_growth_portfolio(
                 amount=amount * growth_allocation,
                 min_marketcap_eur=300_000_000,
@@ -274,6 +278,7 @@ async def optimize_portfolio(request: Request):
                 n_stocks=10,
                 region="EU,US"
             )
+            logger.info(f"[DEBUG] Respuesta Perplexity growth: {growth_stocks}")
             if not growth_stocks or not isinstance(growth_stocks, list):
                 raise ValueError("Perplexity no devolvió un portafolio válido.")
         except Exception as e:
