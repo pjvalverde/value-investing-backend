@@ -232,6 +232,12 @@ async def create_portfolio(request: Request):
             "target_alloc": target_alloc,
             "created_at": datetime.now().isoformat()
         }
+    except Exception as e:
+        logger.error(f"Error al crear portafolio: {str(e)}")
+        return JSONResponse(
+            status_code=500,
+            content={"error": "Error al crear portafolio", "details": str(e)}
+        )
 
 @app.post("/api/portfolio/optimize")
 async def optimize_portfolio(request: Request):
