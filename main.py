@@ -41,7 +41,7 @@ def check_perplexity_key():
 # Permitir acceso desde el frontend React - Configuración explícita de CORS
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["https://pjvalverde.github.io", "https://pjvalverde.github.io/value-investing-portfolio"],
+    allow_origins=["https://pjvalverde.github.io"],  # Solo permite el frontend de GitHub Pages
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
