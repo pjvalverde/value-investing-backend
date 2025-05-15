@@ -232,7 +232,8 @@ async def optimize_portfolio(request: Request):
         bonds_allocation = target_alloc.get("bonds", 0) / 100
         
         # Importar las funciones necesarias para obtener datos reales
-        from app_railway import get_value_stocks, get_growth_stocks, alpha_client
+        # from app_railway import get_value_stocks, get_growth_stocks, alpha_client
+        # Usar las listas y el alpha_client global definidos arriba
         import asyncio
         
         logger.info("Obteniendo recomendaciones de acciones value y growth con Perplexity API")
