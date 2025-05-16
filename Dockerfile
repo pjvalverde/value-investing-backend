@@ -15,7 +15,7 @@ COPY . .
 ENV PORT=${PORT}
 
 # Exponer el puerto
-EXPOSE 8000
+EXPOSE $PORT
 
 # Comando para ejecutar la aplicaciu00f3n
-CMD ["uvicorn", "main:app", "--host", "0.0.0.0", "--port", "8000"]
+CMD ["uvicorn", "main:app", "--host", "0.0.0.0", "--port", "$PORT"]
