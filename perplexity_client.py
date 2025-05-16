@@ -10,7 +10,7 @@ class PerplexityClient:
         if not self.api_key:
             raise ValueError("PERPLEXITY_API_KEY is not set in environment variables.")
         self.api_url = "https://api.perplexity.ai/chat/completions"
-        self.model = "llama-3-sonar-large-32k-online"
+        self.model = "sonar-pro"
 
     def get_growth_portfolio(self, amount, min_marketcap_eur=300_000_000, max_marketcap_eur=2_000_000_000, min_beta=1.2, max_beta=1.4, n_stocks=10, region="EU,US"):
         """
