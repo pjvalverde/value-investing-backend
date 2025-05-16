@@ -47,7 +47,7 @@ class ClaudeClient:
             response = self.client.completions.create(
                 prompt=prompt,
                 stop_sequences=[HUMAN_PROMPT],
-                model="claude-2.1",
+                model="claude-3-7-sonnet-20250219",
                 max_tokens_to_sample=800,
                 temperature=0.7,
             )
