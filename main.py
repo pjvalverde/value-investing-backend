@@ -30,6 +30,11 @@ alpha_client = ImprovedAlphaVantageClient()
 # Crear la aplicación FastAPI
 app = FastAPI(title="Value Investing API", description="API para el sistema de Value Investing")
 
+# Endpoint raíz para status
+@app.get("/")
+def root():
+    return {"status": "ok"}
+
 # Importar ClaudeClient para análisis cualitativo
 from claude_client import ClaudeClient
 claude_client = ClaudeClient()
