@@ -221,13 +221,17 @@ async def portfolio_analysis(request: Request):
     """
     try:
         data = await request.json()
+        logger.info(f"Body recibido en /api/portfolio/analysis: {data}")
         portfolio = data.get("portfolio")
         strategy_description = data.get("strategy_description")
         language = data.get("language", "es")
-        # Permitir tanto lista como objeto con allocation
-        if isinstance(portfolio, dict) and "allocation" in portfolio:
-            portfolio = portfolio["allocation"]
-        if not portfolio or not isinstance(portfolio, list):
+        # Permitir lista directa, allocation, positions
+        if isinstance(portfolio, dict):
+            if "allocation" in portfolio and isinstance(portfolio["allocation"], list):
+                portfolio = portfolio["allocation"]
+            elif "positions" in portfolio and isinstance(portfolio["positions"], list):
+                portfolio = portfolio["positions"]
+        if not portfolio or not isinstance(portfolio, list) or len(portfolio) == 0:
             raise ValueError("Debes proporcionar un portafolio real (lista de acciones)")
         # Validar que no hay campos simulados
         for stock in portfolio:
