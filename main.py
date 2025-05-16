@@ -106,6 +106,107 @@ async def get_growth_screener(min_growth: float = 0.20, region: str = "US,EU"):
 
 # Rutas para portfolios
 
+from perplexity_client import PerplexityClient
+perplexity_client = PerplexityClient()
+
+@app.post("/api/portfolio/value")
+async def get_portfolio_value(request: Request):
+    try:
+        data = await request.json()
+        amount = float(data.get("amount", 10000))
+        value_stocks = perplexity_client.get_value_portfolio(
+            amount=amount,
+            min_marketcap_eur=300_000_000,
+            max_marketcap_eur=2_000_000_000,
+            n_stocks=5,
+            region="EU,US"
+        )
+        peso_total = sum([float(stock.get("peso") or stock.get("weight") or 0) for stock in value_stocks])
+        allocation = []
+        for stock in value_stocks:
+            peso = float(stock.get("peso") or stock.get("weight") or 0)
+            weight = peso / peso_total if peso_total else 1 / len(value_stocks)
+            monto = round(amount * weight, 2)
+            price = float(stock.get("price") or 1)
+            shares = round(monto / price, 2) if price else 0
+            allocation.append({
+                "ticker": stock.get("ticker"),
+                "name": stock.get("nombre") or stock.get("name"),
+                "sector": stock.get("sector"),
+                "country": stock.get("pais") or stock.get("country"),
+                "weight": round(weight, 4),
+                "amount": monto,
+                "shares": shares,
+                "metrics": stock.get("metrics", {}),
+                "price": price
+            })
+        return {"allocation": allocation}
+    except Exception as e:
+        logger.error(f"Error en /api/portfolio/value: {str(e)}")
+        return JSONResponse(status_code=500, content={"error": str(e)})
+
+@app.post("/api/portfolio/growth")
+async def get_portfolio_growth(request: Request):
+    try:
+        data = await request.json()
+        amount = float(data.get("amount", 10000))
+        growth_stocks = perplexity_client.get_growth_portfolio(
+            amount=amount,
+            min_marketcap_eur=300_000_000,
+            max_marketcap_eur=2_000_000_000,
+            min_beta=1.2,
+            max_beta=1.4,
+            n_stocks=5,
+            region="EU,US"
+        )
+        peso_total = sum([float(stock.get("peso") or stock.get("weight") or 0) for stock in growth_stocks])
+        allocation = []
+        for stock in growth_stocks:
+            peso = float(stock.get("peso") or stock.get("weight") or 0)
+            weight = peso / peso_total if peso_total else 1 / len(growth_stocks)
+            monto = round(amount * weight, 2)
+            price = float(stock.get("price") or 1)
+            shares = round(monto / price, 2) if price else 0
+            allocation.append({
+                "ticker": stock.get("ticker"),
+                "name": stock.get("nombre") or stock.get("name"),
+                "sector": stock.get("sector"),
+                "country": stock.get("pais") or stock.get("country"),
+                "weight": round(weight, 4),
+                "amount": monto,
+                "shares": shares,
+                "metrics": stock.get("metrics", {}),
+                "price": price
+            })
+        return {"allocation": allocation}
+    except Exception as e:
+        logger.error(f"Error en /api/portfolio/growth: {str(e)}")
+        return JSONResponse(status_code=500, content={"error": str(e)})
+
+@app.post("/api/portfolio/bonds")
+async def get_portfolio_bonds(request: Request):
+    try:
+        data = await request.json()
+        amount = float(data.get("amount", 10000))
+        # MOCK: Devuelve un ejemplo simple de bonos/ETFs
+        allocation = [
+            {
+                "ticker": "BND",
+                "name": "Vanguard Total Bond Market ETF",
+                "sector": "Bonos",
+                "country": "US",
+                "weight": 1.0,
+                "amount": amount,
+                "shares": round(amount / 75, 2),
+                "metrics": {},
+                "price": 75
+            }
+        ]
+        return {"allocation": allocation}
+    except Exception as e:
+        logger.error(f"Error en /api/portfolio/bonds: {str(e)}")
+        return JSONResponse(status_code=500, content={"error": str(e)})
+
 @app.post("/api/portfolio/analysis")
 async def portfolio_analysis(request: Request):
     """
