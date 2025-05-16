@@ -175,10 +175,23 @@ const PortfolioBuilder = () => {
           <div className="step-container">
             <h2>Tu Portfolio Optimizado</h2>
 
-            <PortfolioResults
-              portfolio={portfolio}
-              amount={formData.amount}
-            />
+            {/* Debug log del portfolio recibido */}
+            <pre style={{background:'#f8f8f8', fontSize:12, padding:8, borderRadius:6, marginBottom:12}}>
+              <b>DEBUG portfolio:</b> {JSON.stringify(portfolio, null, 2)}
+            </pre>
+
+            {/* Chequeo de allocation */}
+            {Array.isArray(portfolio.allocation) && portfolio.allocation.length > 0 ? (
+              <PortfolioResults
+                portfolio={portfolio}
+                amount={formData.amount}
+              />
+            ) : (
+              <div style={{color:'red', marginBottom:16}}>
+                Error: El backend devolvió un portfolio sin allocation válida.<br/>
+                Verifica la respuesta en el log de arriba y revisa el endpoint.
+              </div>
+            )}
 
             <div className="buttons-container">
               <button
@@ -202,4 +215,5 @@ const PortfolioBuilder = () => {
   );
 };
 
+export default PortfolioBuilder;
 export default PortfolioBuilder; 
