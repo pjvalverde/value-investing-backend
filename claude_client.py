@@ -44,14 +44,16 @@ class ClaudeClient:
             prompt += f"- {stock.get('ticker')} | Sector: {stock.get('sector')} | Peso: {peso_str} | Métricas: {stock.get('metrics', {})}\n"
         prompt += f"{AI_PROMPT}"
         try:
-            response = self.client.completions.create(
-                prompt=prompt,
-                stop_sequences=[HUMAN_PROMPT],
+            response = self.client.messages.create(
                 model="claude-3-7-sonnet-20250219",
-                max_tokens_to_sample=800,
+                max_tokens=800,
                 temperature=0.7,
+                messages=[
+                    {"role": "user", "content": prompt}
+                ]
             )
-            return response.completion.strip()
+            # El contenido viene como una lista de bloques, usualmente uno solo
+            return response.content[0].text.strip() if response.content else "[Sin respuesta de Claude]"
         except Exception as e:
             logger.error(f"Error al llamar a Claude: {str(e)}")
             return f"[Error al generar análisis con Claude: {e}]"
