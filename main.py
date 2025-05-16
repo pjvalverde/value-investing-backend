@@ -227,8 +227,17 @@ async def portfolio_analysis(request: Request):
         language = data.get("language", "es")
         # Permitir lista directa, allocation, positions
         if isinstance(portfolio, dict):
-            if "allocation" in portfolio and isinstance(portfolio["allocation"], list):
-                portfolio = portfolio["allocation"]
+            if "allocation" in portfolio:
+                alloc = portfolio["allocation"]
+                # Si allocation es un dict con value/growth/bonds, aplanar
+                if isinstance(alloc, dict):
+                    combined = []
+                    for key in alloc:
+                        if isinstance(alloc[key], list):
+                            combined.extend(alloc[key])
+                    portfolio = combined
+                elif isinstance(alloc, list):
+                    portfolio = alloc
             elif "positions" in portfolio and isinstance(portfolio["positions"], list):
                 portfolio = portfolio["positions"]
         if not portfolio or not isinstance(portfolio, list) or len(portfolio) == 0:
