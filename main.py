@@ -122,6 +122,9 @@ async def portfolio_analysis(request: Request):
         portfolio = data.get("portfolio")
         strategy_description = data.get("strategy_description")
         language = data.get("language", "es")
+        # Permitir tanto lista como objeto con allocation
+        if isinstance(portfolio, dict) and "allocation" in portfolio:
+            portfolio = portfolio["allocation"]
         if not portfolio or not isinstance(portfolio, list):
             raise ValueError("Debes proporcionar un portafolio real (lista de acciones)")
         # Validar que no hay campos simulados
