@@ -1,6 +1,7 @@
 import os
 import requests
 import logging
+import json
 
 logger = logging.getLogger("perplexity-client")
 
@@ -52,7 +53,7 @@ class PerplexityClient:
             if start_idx != -1 and end_idx != -1:
                 json_str = response_text[start_idx:end_idx+1]
                 try:
-                    stocks_data = requests.utils.json.loads(json_str)
+                    stocks_data = json.loads(json_str)
                     logger.info(f"Portafolio growth obtenido con {len(stocks_data)} acciones")
                     return stocks_data
                 except Exception as e:
@@ -108,7 +109,7 @@ class PerplexityClient:
             if start_idx != -1 and end_idx != -1:
                 json_str = response_text[start_idx:end_idx+1]
                 try:
-                    stocks_data = requests.utils.json.loads(json_str)
+                    stocks_data = json.loads(json_str)
                     logger.info(f"Portafolio value obtenido con {len(stocks_data)} acciones")
                     return stocks_data
                 except Exception as e:
