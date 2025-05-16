@@ -23,16 +23,17 @@ class ClaudeClient:
         """
         prompt = (
             f"{HUMAN_PROMPT} Eres un analista financiero experto en inversión cuantitativa y value investing. "
-            f"Te entrego la composición de un portafolio optimizado, junto con métricas relevantes de cada acción. "
-            f"Redacta un análisis profesional y detallado justificando la selección, riesgos, oportunidades y diversificación. "
-            f"Incluye referencias a la filosofía de Buffett y Graham, y sugiere mejoras si es relevante. "
+            f"Te entrego la composición de un portafolio optimizado. "
+            f"Primero, presenta una tabla en formato Markdown con las siguientes columnas: Ticker, Estrategia, Sector, País, Peso (%), Precio, Acciones, Valor, Métricas clave. "
+            f"Usa los datos que te proporciono abajo. Después de la tabla, redacta un análisis profesional, recomendaciones y alertas visuales si detectas riesgos o concentraciones. "
             f"El análisis debe estar en {language}.\n"
         )
         if strategy_description:
             prompt += f"\nDescripción de la estrategia: {strategy_description}\n"
-        prompt += f"\nComposición del portafolio:\n"
+        prompt += "\nComposición del portafolio:\n"
+        prompt += "| Ticker | Estrategia | Sector | País | Peso (%) | Precio | Acciones | Valor | Métricas clave |\n"
+        prompt += "|--------|------------|--------|------|----------|--------|----------|-------|----------------|\n"
         for stock in portfolio:
-            # Asegurar que el peso sea float para evitar errores de formato
             peso = stock.get('peso')
             if peso is None:
                 peso = stock.get('weight')
@@ -41,7 +42,10 @@ class ClaudeClient:
                 peso_str = f"{peso_float:.2f}%"
             except (TypeError, ValueError):
                 peso_str = "-"
-            prompt += f"- {stock.get('ticker')} | Sector: {stock.get('sector')} | Peso: {peso_str} | Métricas: {stock.get('metrics', {})}\n"
+            metrics = stock.get('metrics', {})
+            metrics_str = ', '.join([f"{k}: {v}" for k, v in metrics.items()]) if metrics else '-'
+            prompt += f"| {stock.get('ticker','-')} | {stock.get('estrategia', stock.get('strategy','-'))} | {stock.get('sector','-')} | {stock.get('country','-')} | {peso_str} | {stock.get('price','-')} | {stock.get('shares','-')} | {stock.get('amount','-')} | {metrics_str} |\n"
+        prompt += "\nAhora, debajo de la tabla, presenta un análisis profesional, recomendaciones y alertas visuales si detectas riesgos o concentraciones.\n"
         prompt += f"{AI_PROMPT}"
         try:
             response = self.client.messages.create(
