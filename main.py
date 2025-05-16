@@ -268,9 +268,10 @@ async def optimize_portfolio(request: Request):
             )
         portfolio_id = data.get("portfolio_id", str(uuid.uuid4()))
         target_alloc = data.get("target_alloc", {"growth": 100})
-        amount = data.get("amount", 10000)
-        growth_allocation = target_alloc.get("growth", 100) / 100
-        value_allocation = target_alloc.get("value", 0) / 100
+        # Convertir a float para evitar errores de tipo
+        amount = float(data.get("amount", 10000))
+        growth_allocation = float(target_alloc.get("growth", 100)) / 100
+        value_allocation = float(target_alloc.get("value", 0)) / 100
 
         # Llamar a Perplexity para obtener el portafolio growth
         try:
@@ -319,14 +320,14 @@ async def optimize_portfolio(request: Request):
             )
 
         # Asignar pesos y cantidades
-        peso_total_growth = sum([stock.get("peso", 0) or stock.get("weight", 0) or 0 for stock in growth_stocks])
-        peso_total_value = sum([stock.get("peso", 0) or stock.get("weight", 0) or 0 for stock in value_stocks])
+        peso_total_growth = sum([float(stock.get("peso") or stock.get("weight") or 0) for stock in growth_stocks])
+        peso_total_value = sum([float(stock.get("peso") or stock.get("weight") or 0) for stock in value_stocks])
         allocation = []
         for stock in growth_stocks:
-            peso = stock.get("peso") or stock.get("weight") or 0
+            peso = float(stock.get("peso") or stock.get("weight") or 0)
             weight = peso / peso_total_growth if peso_total_growth else 1 / len(growth_stocks)
             monto = round(amount * growth_allocation * weight, 2)
-            price = stock.get("price") or 1  # Si Perplexity no da precio, poner 1 para evitar error
+            price = float(stock.get("price") or 1)  # Si Perplexity no da precio, poner 1 para evitar error
             shares = round(monto / price, 2) if price else 0
             allocation.append({
                 "ticker": stock.get("ticker"),
@@ -340,10 +341,10 @@ async def optimize_portfolio(request: Request):
                 "price": price
             })
         for stock in value_stocks:
-            peso = stock.get("peso") or stock.get("weight") or 0
+            peso = float(stock.get("peso") or stock.get("weight") or 0)
             weight = peso / peso_total_value if peso_total_value else 1 / len(value_stocks)
             monto = round(amount * value_allocation * weight, 2)
-            price = stock.get("price") or 1  # Si Perplexity no da precio, poner 1 para evitar error
+            price = float(stock.get("price") or 1)  # Si Perplexity no da precio, poner 1 para evitar error
             shares = round(monto / price, 2) if price else 0
             allocation.append({
                 "ticker": stock.get("ticker"),
