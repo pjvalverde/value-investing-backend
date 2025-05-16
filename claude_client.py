@@ -32,7 +32,16 @@ class ClaudeClient:
             prompt += f"\nDescripción de la estrategia: {strategy_description}\n"
         prompt += f"\nComposición del portafolio:\n"
         for stock in portfolio:
-            prompt += f"- {stock.get('ticker')} | Sector: {stock.get('sector')} | Peso: {stock.get('peso', '-'):.2f}% | Métricas: {stock.get('metrics', {})}\n"
+            # Asegurar que el peso sea float para evitar errores de formato
+            peso = stock.get('peso')
+            if peso is None:
+                peso = stock.get('weight')
+            try:
+                peso_float = float(peso)
+                peso_str = f"{peso_float:.2f}%"
+            except (TypeError, ValueError):
+                peso_str = "-"
+            prompt += f"- {stock.get('ticker')} | Sector: {stock.get('sector')} | Peso: {peso_str} | Métricas: {stock.get('metrics', {})}\n"
         prompt += f"{AI_PROMPT}"
         try:
             response = self.client.completions.create(
