@@ -58,3 +58,5 @@ python app_simple.py
 ## Frontend Repository
 
 The frontend application is available at: https://github.com/pjvalverde/value-investing-portfolio
+
+
