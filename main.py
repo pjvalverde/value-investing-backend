@@ -301,8 +301,6 @@ async def optimize_portfolio(request: Request):
                 amount=amount * value_allocation,
                 min_marketcap_eur=300_000_000,
                 max_marketcap_eur=2_000_000_000,
-                min_beta=1.2,
-                max_beta=1.4,
                 n_stocks=10,
                 region="EU,US"
             )
