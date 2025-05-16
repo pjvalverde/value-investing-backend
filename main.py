@@ -208,6 +208,7 @@ async def get_portfolio_bonds(request: Request):
         return JSONResponse(status_code=500, content={"error": str(e)})
 
 @app.post("/api/portfolio/analysis")
+@app.post("/api/portfolio/claude-analysis")
 async def portfolio_analysis(request: Request):
     """
     Endpoint que recibe la composición de un portafolio y devuelve un análisis detallado generado por Claude.
