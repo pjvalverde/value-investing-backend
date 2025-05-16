@@ -282,7 +282,7 @@ async def optimize_portfolio(request: Request):
                 max_marketcap_eur=2_000_000_000,
                 min_beta=1.2,
                 max_beta=1.4,
-                n_stocks=10,
+                n_stocks=5,
                 region="EU,US"
             )
             logger.info(f"[DEBUG] Respuesta Perplexity growth: {growth_stocks}")
@@ -302,7 +302,7 @@ async def optimize_portfolio(request: Request):
                 amount=amount * value_allocation,
                 min_marketcap_eur=300_000_000,
                 max_marketcap_eur=2_000_000_000,
-                n_stocks=10,
+                n_stocks=5,
                 region="EU,US"
             )
             if not value_stocks or not isinstance(value_stocks, list):
