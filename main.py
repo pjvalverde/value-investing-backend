@@ -290,6 +290,7 @@ async def optimize_portfolio(request: Request):
                 raise ValueError("Perplexity no devolvió un portafolio válido.")
         except Exception as e:
             logger.error(f"Error obteniendo portafolio growth de Perplexity: {str(e)}")
+            logger.error("[LOG] Devolviendo error al obtener portafolio growth desde Perplexity")
             return JSONResponse(
                 status_code=500,
                 content={"error": "No se pudo obtener el portafolio growth desde Perplexity.", "details": str(e)}
@@ -308,6 +309,7 @@ async def optimize_portfolio(request: Request):
                 raise ValueError("Perplexity no devolvió un portafolio válido.")
         except Exception as e:
             logger.error(f"Error obteniendo portafolio value de Perplexity: {str(e)}")
+            logger.error("[LOG] Devolviendo error al obtener portafolio value desde Perplexity")
             return JSONResponse(
                 status_code=500,
                 content={"error": "No se pudo obtener el portafolio value desde Perplexity.", "details": str(e)}
@@ -363,17 +365,19 @@ async def optimize_portfolio(request: Request):
             "source": "perplexity_api"
         }
         logger.info(f"Portfolio optimizado generado solo con Perplexity: {optimized}")
+        logger.info("[LOG] Devolviendo respuesta final optimizada")
         return optimized
     except Exception as e:
         logger.error(f"Error en endpoint /api/portfolio/optimize: {str(e)}")
         import traceback
         logger.error(traceback.format_exc())
+        logger.error("[LOG] Devolviendo error general en optimize_portfolio")
         return JSONResponse(
             status_code=500,
             content={"error": "Error al optimizar portfolio (solo Perplexity)", "details": str(e)}
         )
     finally:
-        pass
+        logger.info("[LOG] Finalizó ejecución de optimize_portfolio (finally)")
 
 # ... (rest of the code remains the same)
     uvicorn.run("main:app", host="0.0.0.0", port=port)
