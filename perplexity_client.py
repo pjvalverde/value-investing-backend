@@ -53,7 +53,9 @@ class PerplexityClient:
             if start_idx != -1 and end_idx != -1:
                 json_str = response_text[start_idx:end_idx+1]
                 try:
-                    stocks_data = json.loads(json_str)
+                    # Sanitizar: eliminar guiones bajos en los números antes de parsear
+                    json_str_clean = json_str.replace('_', '')
+                    stocks_data = json.loads(json_str_clean)
                     logger.info(f"Portafolio growth obtenido con {len(stocks_data)} acciones")
                     return stocks_data
                 except Exception as e:
@@ -109,7 +111,9 @@ class PerplexityClient:
             if start_idx != -1 and end_idx != -1:
                 json_str = response_text[start_idx:end_idx+1]
                 try:
-                    stocks_data = json.loads(json_str)
+                    # Sanitizar: eliminar guiones bajos en los números antes de parsear
+                    json_str_clean = json_str.replace('_', '')
+                    stocks_data = json.loads(json_str_clean)
                     logger.info(f"Portafolio value obtenido con {len(stocks_data)} acciones")
                     return stocks_data
                 except Exception as e:
