@@ -196,18 +196,18 @@ async def get_portfolio_growth(request: Request):
         logger.error(f"Error en /api/portfolio/growth: {str(e)}")
         return JSONResponse(status_code=500, content={"error": str(e)})
 
-@app.post("/api/portfolio/bonds")
-async def get_portfolio_bonds(request: Request):
+@app.post("/api/portfolio/disruptive")
+async def get_portfolio_disruptive(request: Request):
     try:
         data = await request.json()
         amount = float(data.get("amount", 10000))
         # Obtener datos reales de la API de Perplexity
-        bonds_etfs = perplexity_client.get_bonds_etfs_portfolio(amount=amount, n_funds=5, region="EU,US")
-        peso_total = sum([float(f.get("peso") or f.get("weight") or 0) for f in bonds_etfs])
+        disruptive_stocks = perplexity_client.get_disruptive_portfolio(amount=amount, n_stocks=5, region="EU,US")
+        peso_total = sum([float(f.get("peso") or f.get("weight") or 0) for f in disruptive_stocks])
         allocation = []
-        for f in bonds_etfs:
+        for f in disruptive_stocks:
             peso = float(f.get("peso") or f.get("weight") or 0)
-            weight = peso / peso_total if peso_total else 1 / len(bonds_etfs)
+            weight = peso / peso_total if peso_total else 1 / len(disruptive_stocks)
             monto = round(amount * weight, 2)
             price = float(f.get("price") or 1)
             shares = round(monto / price, 2) if price else 0
@@ -225,7 +225,7 @@ async def get_portfolio_bonds(request: Request):
             })
         return {"allocation": allocation}
     except Exception as e:
-        logger.error(f"Error en /api/portfolio/bonds: {str(e)}")
+        logger.error(f"Error en /api/portfolio/disruptive: {str(e)}")
         return JSONResponse(status_code=500, content={"error": str(e)})
 
 @app.post("/api/portfolio/analysis")
@@ -250,7 +250,7 @@ async def portfolio_analysis(request: Request):
         if isinstance(portfolio, dict):
             if "allocation" in portfolio:
                 alloc = portfolio["allocation"]
-                # Si allocation es un dict con value/growth/bonds, aplanar
+                # Si allocation es un dict con value/growth/disruptive, aplanar
                 if isinstance(alloc, dict):
                     combined = []
                     for key in alloc:
@@ -301,18 +301,18 @@ async def recommend_portfolio(request: Request):
 
         # Lógica de asignación base según perfil de riesgo
         alloc_map = {
-            "conservative": {"value": 50, "growth": 20, "bonds": 30},
-            "balanced": {"value": 40, "growth": 40, "bonds": 20},
-            "aggressive": {"value": 25, "growth": 65, "bonds": 10}
+            "conservative": {"value": 50, "growth": 20, "disruptive": 30},
+            "balanced": {"value": 40, "growth": 40, "disruptive": 20},
+            "aggressive": {"value": 25, "growth": 65, "disruptive": 10}
         }
         target_alloc = alloc_map.get(risk_profile, alloc_map["balanced"])
 
-        # Ajustar según horizonte (más largo = más growth, menos bonds)
+        # Ajustar según horizonte (más largo = más growth, menos disruptive)
         if investment_horizon == "long":
             target_alloc["growth"] += 10
-            target_alloc["bonds"] -= 10
+            target_alloc["disruptive"] -= 10
         elif investment_horizon == "short":
-            target_alloc["bonds"] += 10
+            target_alloc["disruptive"] += 10
             target_alloc["growth"] -= 10
 
         # Normalizar si algún valor sale de rango
@@ -323,27 +323,27 @@ async def recommend_portfolio(request: Request):
         # Obtener recomendaciones de acciones usando Perplexity API (growth y value)
         value_stocks = portfolio_service._get_value_stocks(3)
         growth_stocks = portfolio_service._get_growth_stocks(3)
-        bond_etfs = portfolio_service._get_bond_etfs(1)
+        disruptive_stocks = portfolio_service._get_disruptive_stocks(1)
 
         # Construir la estructura del portafolio recomendado
         portfolio = {
             "value": value_stocks,
             "growth": growth_stocks,
-            "bonds": bond_etfs
+            "disruptive": disruptive_stocks
         }
 
         # Calcular métricas estimadas (usando lógica interna)
         metrics = portfolio_service._calculate_portfolio_metrics(
             [dict(weight=target_alloc['value']/100, **s) for s in value_stocks],
             [dict(weight=target_alloc['growth']/100, **s) for s in growth_stocks],
-            [dict(weight=target_alloc['bonds']/100, **s) for s in bond_etfs]
+            [dict(weight=target_alloc['disruptive']/100, **s) for s in disruptive_stocks]
         )
 
         # Justificación de la composición
         justifications = {
             "value": "Acciones seleccionadas por criterios de value investing con potencial de revalorización y baja valoración relativa.",
             "growth": "Empresas de alto crecimiento, usualmente small/micro caps, con fuerte momentum de ingresos y beneficios.",
-            "bonds": "ETFs de bonos para diversificación y reducción de volatilidad, ajustados al perfil de riesgo."
+            "disruptive": "Disruptives para diversificación y reducción de volatilidad, ajustados al perfil de riesgo."
         }
 
         return {
@@ -367,7 +367,7 @@ async def create_portfolio(request: Request):
         data = await request.json()
         user_id = data.get("user_id", str(uuid.uuid4()))
         name = data.get("name", "Mi Portfolio")
-        target_alloc = data.get("target_alloc", {"value": 40, "growth": 40, "bonds": 20})
+        target_alloc = data.get("target_alloc", {"value": 40, "growth": 40, "disruptive": 20})
         
         portfolio_id = str(uuid.uuid4())
         
@@ -404,58 +404,35 @@ async def optimize_portfolio(request: Request):
             )
         portfolio_id = data.get("portfolio_id", str(uuid.uuid4()))
         target_alloc = data.get("target_alloc", {"growth": 100})
-        # Convertir a float para evitar errores de tipo
         amount = float(data.get("amount", 10000))
-        growth_allocation = float(target_alloc.get("growth", 100)) / 100
+        growth_allocation = float(target_alloc.get("growth", 0)) / 100
         value_allocation = float(target_alloc.get("value", 0)) / 100
+        disruptive_allocation = float(target_alloc.get("disruptive", 0)) / 100
 
-        # Llamar a Perplexity para obtener el portafolio growth
-        # Este bloque try no tenía except ni finally, lo removemos para cumplir con la sintaxis de Python.
-        import os
-        api_key = os.getenv("PERPLEXITY_API_KEY")
-        logger.info(f"[DEBUG] Usando PERPLEXITY_API_KEY: {api_key[:5]}..." if api_key else "[DEBUG] PERPLEXITY_API_KEY no está configurada")
-        logger.info(f"[DEBUG] Parámetros enviados a Perplexity growth: amount={amount * growth_allocation}, min_marketcap_eur=300_000_000, max_marketcap_eur=2_000_000_000, min_beta=1.2, max_beta=1.4, n_stocks=10, region='EU,US'")
+        result = {}
         perplexity_client = PerplexityClient()
-        growth_stocks = perplexity_client.get_growth_portfolio(
-            amount=amount * growth_allocation,
-            min_marketcap_eur=300_000_000,
-            max_marketcap_eur=2_000_000_000,
-            min_beta=1.2,
-            max_beta=1.4,
-            n_stocks=5,
-            region="EU,US"
-        )
 
         # Value
-        if value_pct > 0:
+        if value_allocation > 0:
             try:
-                value_data = perplexity_client.get_value_portfolio(amount * value_pct / 100)
+                value_data = perplexity_client.get_value_portfolio(amount * value_allocation)
                 result["value"] = value_data if value_data else "No se encontraron acciones value reales."
             except Exception as e:
                 result["value"] = f"Error consultando acciones value: {str(e)}"
         # Growth
-        if growth_pct > 0:
+        if growth_allocation > 0:
             try:
-                growth_data = perplexity_client.get_growth_portfolio(amount * growth_pct / 100)
+                growth_data = perplexity_client.get_growth_portfolio(amount * growth_allocation)
                 result["growth"] = growth_data if growth_data else "No se encontraron acciones growth reales."
             except Exception as e:
                 result["growth"] = f"Error consultando acciones growth: {str(e)}"
-        # Bonos/ETFs
-        if bonds_pct > 0:
+        # Disruptive
+        if disruptive_allocation > 0:
             try:
-                bonds_data = perplexity_client.get_bonds_etfs_portfolio(amount * bonds_pct / 100)
-                if not bonds_data or len(bonds_data) == 0:
-                    # Fallback: sugerir ETFs baratos del S&P 500 (solo tickers conocidos, no datos simulados)
-                    bonds_data = [
-                        {"ticker": "VOO", "name": "Vanguard S&P 500 ETF", "type": "ETF", "comentario": "ETF barato y diversificado del S&P 500"},
-                        {"ticker": "IVV", "name": "iShares Core S&P 500 ETF", "type": "ETF", "comentario": "ETF barato y diversificado del S&P 500"},
-                        {"ticker": "SPLG", "name": "SPDR Portfolio S&P 500 ETF", "type": "ETF", "comentario": "ETF barato y diversificado del S&P 500"}
-                    ]
-                    result["bonds"] = {"fallback": True, "data": bonds_data, "mensaje": "No se encontraron bonos/ETFs reales, se sugieren ETFs baratos del S&P 500."}
-                else:
-                    result["bonds"] = {"fallback": False, "data": bonds_data}
+                disruptive_data = perplexity_client.get_disruptive_portfolio(amount * disruptive_allocation)
+                result["disruptive"] = disruptive_data if disruptive_data else []
             except Exception as e:
-                result["bonds"] = f"Error consultando bonos/ETFs: {str(e)}"
+                result["disruptive"] = f"Error consultando categoría disruptiva: {str(e)}"
         return result
     except Exception as e:
         logger.error(f"Error en endpoint /api/portfolio/optimize: {str(e)}")

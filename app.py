@@ -45,43 +45,10 @@ async def log_requests(request: Request, call_next):
         logging.error(f"Error en solicitud: {str(e)}")
         raise
 
-# Datos simulados para desarrollo
-VALUE_STOCKS = [
-    {"ticker": "AAPL", "name": "Apple Inc.", "price": 175.50, "forward_pe": 25.3, "yoy_rev_growth": 0.12},
-    {"ticker": "MSFT", "name": "Microsoft Corp.", "price": 325.20, "forward_pe": 28.1, "yoy_rev_growth": 0.15},
-    {"ticker": "JNJ", "name": "Johnson & Johnson", "price": 152.75, "forward_pe": 15.2, "yoy_rev_growth": 0.08},
-    {"ticker": "PG", "name": "Procter & Gamble", "price": 145.30, "forward_pe": 22.5, "yoy_rev_growth": 0.05},
-    {"ticker": "JPM", "name": "JPMorgan Chase", "price": 138.40, "forward_pe": 12.3, "yoy_rev_growth": 0.10}
-]
 
-GROWTH_STOCKS = [
-    {"ticker": "NVDA", "name": "NVIDIA Corp.", "price": 450.80, "forward_pe": 45.2, "yoy_rev_growth": 0.35},
-    {"ticker": "TSLA", "name": "Tesla Inc.", "price": 220.50, "forward_pe": 60.5, "yoy_rev_growth": 0.28},
-    {"ticker": "AMZN", "name": "Amazon.com Inc.", "price": 178.30, "forward_pe": 38.7, "yoy_rev_growth": 0.22},
-    {"ticker": "GOOGL", "name": "Alphabet Inc.", "price": 142.60, "forward_pe": 22.1, "yoy_rev_growth": 0.18},
-    {"ticker": "META", "name": "Meta Platforms", "price": 480.25, "forward_pe": 24.3, "yoy_rev_growth": 0.25}
-]
 
-# Rutas para el screener
-@app.get("/api/screener/value")
-async def get_value_screener(min_pe: float = 0, max_pe: float = 15, region: str = "US,EU"):
-    try:
-        # Filtrar stocks por PE si se proporciona
-        stocks = [stock for stock in VALUE_STOCKS if min_pe <= stock["forward_pe"] <= max_pe]
-        return {"stocks": stocks}
-    except Exception as e:
-        logging.error(f"Error en endpoint /api/screener/value: {str(e)}")
-        raise HTTPException(status_code=500, detail=str(e))
 
-@app.get("/api/screener/growth")
-async def get_growth_screener(min_growth: float = 0.20, region: str = "US,EU"):
-    try:
-        # Filtrar stocks por crecimiento si se proporciona
-        stocks = [stock for stock in GROWTH_STOCKS if stock["yoy_rev_growth"] >= min_growth]
-        return {"stocks": stocks}
-    except Exception as e:
-        logging.error(f"Error en endpoint /api/screener/growth: {str(e)}")
-        raise HTTPException(status_code=500, detail=str(e))
+
 
 # Rutas para portfolios
 @app.post("/api/portfolio/create")

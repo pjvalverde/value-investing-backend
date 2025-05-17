@@ -34,18 +34,8 @@ function App() {
       if (!res.ok) throw new Error('No se pudo obtener el portafolio');
       const data = await res.json();
       setPortfolio(data);
-      // (Opcional) Simula datos históricos y comparativos
-      setHistoricalData([
-        { date: '2022-01', value: 100, CompanyA: 100, CompanyB: 100 },
-        { date: '2022-06', value: 110, CompanyA: 115, CompanyB: 108 },
-        { date: '2023-01', value: 120, CompanyA: 125, CompanyB: 119 },
-        { date: '2023-06', value: 130, CompanyA: 140, CompanyB: 127 },
-        { date: '2024-01', value: 145, CompanyA: 150, CompanyB: 140 }
-      ]);
-      setComparativeData([
-        { company: 'CompanyA', ROE: 18, 'P/E': 14, 'Margen de Beneficio': '22%', 'Ratio de Deuda': '0.3', 'Crecimiento de FCF': '9%', 'Moat Cualitativo': 'Alto' },
-        { company: 'CompanyB', ROE: 15, 'P/E': 17, 'Margen de Beneficio': '18%', 'Ratio de Deuda': '0.4', 'Crecimiento de FCF': '7%', 'Moat Cualitativo': 'Medio' }
-      ]);
+      setHistoricalData([]);
+      setComparativeData([]);
     } catch (e) {
       setError(e.message);
     } finally {

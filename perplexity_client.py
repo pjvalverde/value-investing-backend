@@ -133,22 +133,21 @@ class PerplexityClient:
             logger.error(f"Error al consultar Perplexity API: {str(e)}")
             raise
 
-    def get_bonds_etfs_portfolio(self, amount, n_funds=5, region="EU,US"):
+    def get_disruptive_portfolio(self, amount, n_instruments=5, region="EU,US"):
         """
-        Llama a Perplexity para obtener una lista óptima de ETFs y bonos globales diversificados según los criterios dados.
-        Devuelve una lista de fondos/bonos con pesos sugeridos y métricas clave.
+        Llama a Perplexity para obtener una lista óptima de instrumentos disruptivos (Private Equity, Tecnología Especializada, ETFs temáticos, fondos de VC, acciones disruptivas reales, etc) según los criterios dados por el usuario.
+        Devuelve una lista con pesos sugeridos y métricas clave.
         """
         system_prompt = (
-            "Eres un asistente experto en inversión institucional y gestión de carteras. Devuelve únicamente un array JSON de los mejores ETFs y bonos globales diversificados para un inversor europeo o estadounidense, según estos criterios:\n"
-            "- Solo ETFs y bonos REALES, líquidos y diversificados, de preferencia de bajo coste y alta calidad\n"
-            "- NO inventes datos. Si no hay instrumentos reales que cumplan, responde con un array vacío.\n"
-            "- Diversifica entre renta fija (bonos gubernamentales, investment grade, high yield) y ETFs de bonos\n"
-            "- Incluye: ticker, nombre, tipo (ETF, bono), sector, país, peso (%), métricas clave (duration, yield, rating, TER, etc.), precio actual\n"
-            "- TODOS los campos deben estar completos y actualizados, sin valores vacíos ni nulos\n"
-            f"- Diversifica regiones: {region}\n- Devuelve exactamente {n_funds} instrumentos.\n- Formato: array JSON, sin texto adicional."
+            "Eres un asistente experto en inversión disruptiva y tecnología. Devuelve únicamente un array JSON de instrumentos reales y actuales en las siguientes categorías:\n"
+            "- Private Equity (fondos de venture capital, private equity, startups de IA, biotecnología, etc)\n"
+            "- Tecnología Especializada (ETFs temáticos, acciones disruptivas, fondos de tecnología, robótica, IA, ciberseguridad, semiconductores, etc)\n"
+            "- Solo instrumentos REALES y actuales, nunca inventados ni simulados.\n"
+            "- Incluye: ticker, nombre, categoría (private_equity, etf_temático, acción_disruptiva, fondo_vc, etc), sector, país, peso (%), rentabilidad esperada, métricas clave (CAGR, drawdown, liquidez, etc), comentarios.\n"
+            f"- Diversifica entre private equity y tecnología avanzada. Región: {region}.\n- Devuelve exactamente {n_instruments} instrumentos.\n- Formato: array JSON, sin texto adicional."
         )
         user_prompt = (
-            f"Quiero invertir €{amount:,} en una cartera diversificada de bonos y ETFs globales. Dame la lista óptima según los criterios."
+            f"Quiero invertir €{amount:,} en una cartera disruptiva global (private equity, tecnología, IA, biotecnología, etc). Dame la lista óptima según los criterios."
         )
         headers = {
             "Authorization": f"Bearer {self.api_key}",
@@ -175,9 +174,15 @@ class PerplexityClient:
                 json_str = response_text[start_idx:end_idx+1]
                 try:
                     json_str_clean = json_str.replace('_', '')
-                    funds_data = json.loads(json_str_clean)
-                    logger.info(f"Portafolio bonos/ETFs obtenido con {len(funds_data)} instrumentos")
-                    return funds_data
+                    try:
+                        disruptive_data = json.loads(json_str_clean)
+                    except json.JSONDecodeError:
+                        import re
+                        json_str_fixed = re.sub(r"(?<=[:,\[\{])\s*'([^']*)'\s*:", r'"\1":', json_str_clean)  # claves
+                        json_str_fixed = re.sub(r":\s*'([^']*)'", r':"\1"', json_str_fixed)                # valores
+                        disruptive_data = json.loads(json_str_fixed)
+                    logger.info(f"Portafolio disruptivo obtenido con {len(disruptive_data)} instrumentos")
+                    return disruptive_data
                 except Exception as e:
                     logger.error(f"Error parsing JSON from Perplexity: {str(e)} | JSON: {json_str}")
                     raise
@@ -187,4 +192,3 @@ class PerplexityClient:
         except Exception as e:
             logger.error(f"Error al consultar Perplexity API: {str(e)}")
             raise
-        # Cambio menor para forzar commit y sincronización
