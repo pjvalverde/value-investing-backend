@@ -203,20 +203,28 @@ async def get_portfolio_bonds(request: Request):
     try:
         data = await request.json()
         amount = float(data.get("amount", 10000))
-        # MOCK: Devuelve un ejemplo simple de bonos/ETFs
-        allocation = [
-            {
-                "ticker": "BND",
-                "name": "Vanguard Total Bond Market ETF",
-                "sector": "Bonos",
-                "country": "US",
-                "weight": 1.0,
-                "amount": amount,
-                "shares": round(amount / 75, 2),
-                "metrics": {},
-                "price": 75
-            }
-        ]
+        # Obtener datos reales de la API de Perplexity
+        bonds_etfs = perplexity_client.get_bonds_etfs_portfolio(amount=amount, n_funds=5, region="EU,US")
+        peso_total = sum([float(f.get("peso") or f.get("weight") or 0) for f in bonds_etfs])
+        allocation = []
+        for f in bonds_etfs:
+            peso = float(f.get("peso") or f.get("weight") or 0)
+            weight = peso / peso_total if peso_total else 1 / len(bonds_etfs)
+            monto = round(amount * weight, 2)
+            price = float(f.get("price") or 1)
+            shares = round(monto / price, 2) if price else 0
+            allocation.append({
+                "ticker": f.get("ticker"),
+                "name": f.get("nombre") or f.get("name"),
+                "type": f.get("tipo") or f.get("type"),
+                "sector": f.get("sector"),
+                "country": f.get("pais") or f.get("country"),
+                "weight": round(weight, 4),
+                "amount": monto,
+                "shares": shares,
+                "metrics": f.get("metrics", {}),
+                "price": price
+            })
         return {"allocation": allocation}
     except Exception as e:
         logger.error(f"Error en /api/portfolio/bonds: {str(e)}")
