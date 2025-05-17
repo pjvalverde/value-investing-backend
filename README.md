@@ -60,3 +60,4 @@ python app_simple.py
 The frontend application is available at: https://github.com/pjvalverde/value-investing-portfolio
 
 
+<!-- Cambio menor para forzar redeploy automático en Heroku -->
