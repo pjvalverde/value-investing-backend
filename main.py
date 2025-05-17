@@ -50,14 +50,24 @@ def check_perplexity_key():
         return {"perplexity_api_key_loaded": False}
 
 
-# Permitir acceso desde cualquier origen en desarrollo
+# Configuración de CORS para permitir solicitudes desde el frontend
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],  # Permite cualquier origen (solo para desarrollo)
+    allow_origins=["*"],  # Permite cualquier origen
     allow_credentials=True,
-    allow_methods=["*"],
-    allow_headers=["*"],
+    allow_methods=["*"],  # Permite todos los métodos
+    allow_headers=["*"],  # Permite todos los encabezados
+    expose_headers=["*"],  # Expone todos los encabezados
 )
+
+# Middleware para manejar las opciones preflight
+@app.middleware("http")
+async def add_cors_headers(request: Request, call_next):
+    response = await call_next(request)
+    response.headers["Access-Control-Allow-Origin"] = "*"
+    response.headers["Access-Control-Allow-Methods"] = "*"
+    response.headers["Access-Control-Allow-Headers"] = "*"
+    return response
 
 # Agregar middleware para loguear todas las solicitudes
 @app.middleware("http")
