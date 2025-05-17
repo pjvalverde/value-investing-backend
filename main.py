@@ -50,10 +50,10 @@ def check_perplexity_key():
         return {"perplexity_api_key_loaded": False}
 
 
-# Permitir acceso desde el frontend React - Configuración explícita de CORS
+# Permitir acceso desde cualquier origen en desarrollo
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["https://pjvalverde.github.io"],  # Solo permite el frontend de GitHub Pages
+    allow_origins=["*"],  # Permite cualquier origen (solo para desarrollo)
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
