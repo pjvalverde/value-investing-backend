@@ -114,13 +114,16 @@ async def get_portfolio_value(request: Request):
     try:
         data = await request.json()
         amount = float(data.get("amount", 10000))
+        region = data.get("region", "US,EU,ASIA,BR")
         value_stocks = perplexity_client.get_value_portfolio(
             amount=amount,
             min_marketcap_eur=300_000_000,
             max_marketcap_eur=2_000_000_000,
             n_stocks=5,
-            region="EU,US"
+            region=region
         )
+        if not value_stocks or not isinstance(value_stocks, list) or len(value_stocks) == 0:
+            return JSONResponse(status_code=200, content={"allocation": [], "message": "No se encontraron acciones Value para los criterios seleccionados."})
         peso_total = sum([float(stock.get("peso") or stock.get("weight") or 0) for stock in value_stocks])
         allocation = []
         for stock in value_stocks:
@@ -150,6 +153,7 @@ async def get_portfolio_growth(request: Request):
     try:
         data = await request.json()
         amount = float(data.get("amount", 10000))
+        region = data.get("region", "US,EU,ASIA,BR")
         growth_stocks = perplexity_client.get_growth_portfolio(
             amount=amount,
             min_marketcap_eur=300_000_000,
@@ -157,8 +161,10 @@ async def get_portfolio_growth(request: Request):
             min_beta=1.2,
             max_beta=1.4,
             n_stocks=5,
-            region="EU,US"
+            region=region
         )
+        if not growth_stocks or not isinstance(growth_stocks, list) or len(growth_stocks) == 0:
+            return JSONResponse(status_code=200, content={"allocation": [], "message": "No se encontraron acciones Growth para los criterios seleccionados."})
         peso_total = sum([float(stock.get("peso") or stock.get("weight") or 0) for stock in growth_stocks])
         allocation = []
         for stock in growth_stocks:
@@ -188,20 +194,24 @@ async def get_portfolio_bonds(request: Request):
     try:
         data = await request.json()
         amount = float(data.get("amount", 10000))
-        # MOCK: Devuelve un ejemplo simple de bonos/ETFs
-        allocation = [
-            {
-                "ticker": "BND",
-                "name": "Vanguard Total Bond Market ETF",
-                "sector": "Bonos",
-                "country": "US",
-                "weight": 1.0,
-                "amount": amount,
-                "shares": round(amount / 75, 2),
-                "metrics": {},
-                "price": 75
-            }
-        ]
+        region = data.get("region", "US,EU,ASIA,BR")
+        bonds_etfs = perplexity_client.get_bonds_etfs(amount=amount, region=region)
+        if not bonds_etfs or not isinstance(bonds_etfs, list) or len(bonds_etfs) == 0:
+            return JSONResponse(status_code=200, content={"allocation": [], "message": "No se encontraron bonos/ETFs para los criterios seleccionados."})
+        allocation = []
+        for etf in bonds_etfs:
+            # tu lógica para armar la respuesta aquí
+            allocation.append({
+                "ticker": etf.get("ticker"),
+                "name": etf.get("name"),
+                "sector": etf.get("sector"),
+                "country": etf.get("country"),
+                "weight": etf.get("weight", 1.0),
+                "amount": amount,  # Ajusta según lógica real
+                "shares": round(amount / float(etf.get("price", 1)), 2),
+                "metrics": etf.get("metrics", {}),
+                "price": etf.get("price", 1)
+            })
         return {"allocation": allocation}
     except Exception as e:
         logger.error(f"Error en /api/portfolio/bonds: {str(e)}")
@@ -215,15 +225,15 @@ async def get_portfolio_disruptive(request: Request):
     try:
         data = await request.json()
         amount = float(data.get("amount", 10000))
-        
+        region = data.get("region", "US,EU,ASIA,BR")
         # Obtener datos de ETFs disruptivos usando Perplexity
         disruptive_etfs = perplexity_client.get_disruptive_etfs(
             amount=amount,
             n_etfs=3,  # Obtener 3 ETFs
-            region="Global"
+            region=region
         )
-        
-        if not disruptive_etfs or not isinstance(disruptive_etfs, list):
+        if not disruptive_etfs or not isinstance(disruptive_etfs, list) or len(disruptive_etfs) == 0:
+            return JSONResponse(status_code=200, content={"allocation": [], "message": "No se encontraron ETFs disruptivos para los criterios seleccionados."})
             raise ValueError("No se pudieron obtener datos de ETFs disruptivos")
         
         # Asegurar que los pesos sumen 1 (100%)
