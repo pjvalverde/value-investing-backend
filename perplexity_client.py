@@ -125,3 +125,56 @@ class PerplexityClient:
         except Exception as e:
             logger.error(f"Error al consultar Perplexity API: {str(e)}")
             raise
+    def get_bonds_etfs_portfolio(self, amount, n_funds=5, region="EU,US"):
+        """
+        Llama a Perplexity para obtener una lista óptima de ETFs y bonos globales diversificados según los criterios dados.
+        Devuelve una lista de fondos/bonos con pesos sugeridos y métricas clave.
+        """
+        system_prompt = (
+            "Eres un asistente experto en inversión institucional y gestión de carteras. Devuelve únicamente un array JSON de los mejores ETFs y bonos globales diversificados para un inversor europeo o estadounidense, según estos criterios:\n"
+            f"- Solo ETFs y bonos reales, líquidos y diversificados, de preferencia de bajo coste y alta calidad\n"
+            f"- Diversifica entre renta fija (bonos gubernamentales, investment grade, high yield) y ETFs de bonos\n"
+            f"- Incluye: ticker, nombre, tipo (ETF, bono), sector, país, peso (%), métricas clave (duration, yield, rating, TER, etc.), precio actual\n"
+            f"- Diversifica regiones: {region}\n- Devuelve exactamente {n_funds} instrumentos.\n- Formato: array JSON, sin texto adicional."
+        )
+        user_prompt = (
+            f"Quiero invertir €{amount:,} en una cartera diversificada de bonos y ETFs globales. Dame la lista óptima según los criterios."
+        )
+        headers = {
+            "Authorization": f"Bearer {self.api_key}",
+            "Content-Type": "application/json"
+        }
+        data = {
+            "model": self.model,
+            "messages": [
+                {"role": "system", "content": system_prompt},
+                {"role": "user", "content": user_prompt}
+            ]
+        }
+        try:
+            response = requests.post(self.api_url, headers=headers, json=data, timeout=60)
+            if response.status_code != 200:
+                logger.error(f"Perplexity API error: {response.status_code} - {response.text}")
+                raise Exception(f"Perplexity API error: {response.status_code}")
+            response_data = response.json()
+            response_text = response_data["choices"][0]["message"]["content"]
+            # Extraer el array JSON de la respuesta
+            start_idx = response_text.find("[")
+            end_idx = response_text.rfind("]")
+            if start_idx != -1 and end_idx != -1:
+                json_str = response_text[start_idx:end_idx+1]
+                try:
+                    json_str_clean = json_str.replace('_', '')
+                    funds_data = json.loads(json_str_clean)
+                    logger.info(f"Portafolio bonos/ETFs obtenido con {len(funds_data)} instrumentos")
+                    return funds_data
+                except Exception as e:
+                    logger.error(f"Error parsing JSON from Perplexity: {str(e)} | JSON: {json_str}")
+                    raise
+            else:
+                logger.error("No se encontró un array JSON en la respuesta de Perplexity")
+                raise Exception("No JSON array found in Perplexity response")
+        except Exception as e:
+            logger.error(f"Error al consultar Perplexity API: {str(e)}")
+            raise
+        # Cambio menor para forzar commit y sincronización
