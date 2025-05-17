@@ -119,6 +119,59 @@ async def get_growth_screener(min_growth: float = 0.20, region: str = "US,EU"):
 
 # Rutas para portfolios
 
+@app.post("/api/portfolio/bonds")
+async def get_portfolio_bonds(request: Request):
+    """
+    Devuelve una cartera de ETFs de bonos usando Perplexity.
+    """
+    try:
+        data = await request.json()
+        amount = float(data.get("amount", 10000))
+        region = data.get("region", "US,EU,ASIA,BR")
+        bond_etfs = perplexity_client.get_bond_etfs(
+            amount=amount,
+            n_etfs=3,
+            region=region
+        )
+        if not bond_etfs or not isinstance(bond_etfs, list) or len(bond_etfs) == 0:
+            return JSONResponse(status_code=200, content={"allocation": [], "message": "No se encontraron ETFs de bonos para los criterios seleccionados."})
+        # Normalizar pesos
+        total_weight = sum(float(etf.get("weight", 0)) for etf in bond_etfs)
+        if total_weight <= 0:
+            for etf in bond_etfs:
+                etf["weight"] = 1.0 / len(bond_etfs)
+        else:
+            for etf in bond_etfs:
+                etf["weight"] = float(etf.get("weight", 0)) / total_weight
+        allocation = []
+        for etf in bond_etfs:
+            weight = float(etf.get("weight", 0))
+            monto = round(amount * weight, 2)
+            price = float(etf.get("price", 1))
+            shares = round(monto / price, 4) if price > 0 else 0
+            allocation.append({
+                "ticker": etf.get("ticker"),
+                "name": etf.get("name"),
+                "sector": etf.get("sector"),
+                "country": etf.get("country"),
+                "weight": weight,
+                "amount": monto,
+                "shares": shares,
+                "metrics": etf.get("metrics", {}),
+                "price": price
+            })
+        return {"allocation": allocation}
+    except Exception as e:
+        logger.error(f"Error en /api/portfolio/bonds: {str(e)}")
+        import traceback
+        logger.error(traceback.format_exc())
+        return JSONResponse(
+            status_code=500,
+            content={"error": f"Error al obtener cartera de bonos: {str(e)}"}
+        )
+
+# Rutas para portfolios
+
 from perplexity_client import PerplexityClient
 perplexity_client = PerplexityClient()
 

@@ -6,6 +6,36 @@ import json
 logger = logging.getLogger("perplexity-client")
 
 class PerplexityClient:
+    def get_bond_etfs(self, amount, n_etfs=3, region="Global"):
+        """
+        Obtiene una lista de ETFs de bonos reales usando Perplexity.
+        """
+        system_prompt = (
+            "Eres un asistente experto en ETFs de bonos y renta fija. Devuelve únicamente un array JSON con los "
+            f"{n_etfs} principales ETFs de bonos (gubernamentales, corporativos, high yield, globales, etc) "
+            "que sean líquidos, diversificados y adecuados para una cartera diversificada.\n"
+            "Cada ETF debe incluir los siguientes campos:\n"
+            "- ticker (ej. 'BND', 'TLT', 'LQD')\n"
+            "- name (nombre completo del ETF)\n"
+            "- sector (ej. 'Bonos Gubernamentales', 'Bonos Corporativos', etc)\n"
+            "- country (país de origen o cobertura)\n"
+            "- price (precio actual en USD, debe ser un número real y actualizado)\n"
+            "- weight (peso sugerido en cartera, entre 0.1 y 0.5, la suma debe ser 1.0)\n"
+            "- metrics (objeto con métricas reales como duration, yield, expense_ratio, aum, etc.)\n"
+            "Usa solo datos reales y actualizados.\n"
+            "Formato: array JSON, sin texto adicional."
+        )
+
+        user_prompt = (
+            f"Dame una lista de los {n_etfs} mejores ETFs de bonos con sus precios actuales, "
+            f"métricas clave y un peso sugerido para una cartera de ${amount:,.2f}. "
+            f"Incluye ETFs de bonos gubernamentales, corporativos y globales. "
+            f"La región objetivo es: {region}."
+        )
+
+        return self._call_perplexity(system_prompt, user_prompt)
+
+class PerplexityClient:
     def __init__(self, api_key=None):
         self.api_key = api_key or os.getenv("PERPLEXITY_API_KEY")
         if not self.api_key:
