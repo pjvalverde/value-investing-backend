@@ -4,7 +4,7 @@ Backend API for the Value Investing Portfolio application. This API provides sto
 
 ## Features
 
-- Real-time stock prices from AlphaVantage API
+- Real-time stock prices and portfolio optimization using Perplexity API
 - Portfolio creation and optimization
 - Stock screening for value and growth investments
 - Investment analysis powered by Claude AI
@@ -27,7 +27,7 @@ The application is configured to deploy on Railway platform.
 ### Deployment Steps
 
 1. Create a new project on Railway
-2. Add environment variables (ALPHAVANTAGE_API_KEY, CLAUDE_API_KEY)
+2. Add environment variables (PERPLEXITY_API_KEY, CLAUDE_API_KEY)
 3. Deploy the repository
 4. The application will be accessible at the generated URL
 
@@ -48,8 +48,6 @@ python app_simple.py
 
 - `/`: Root endpoint - API status
 - `/test`: Health check endpoint
-- `/real_time_price/{ticker}`: Get real-time stock prices
-- `/historical_prices/{ticker}`: Get historical price data
 - `/api/portfolio/create`: Create a new portfolio
 - `/api/portfolio/optimize`: Optimize portfolio allocation
 - `/api/screener/value`: Screen for value stocks

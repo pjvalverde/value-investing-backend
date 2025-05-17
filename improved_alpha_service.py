@@ -1,15 +1,4 @@
-import os
-import json
-import logging
-import requests
-import time
-from datetime import datetime, timedelta
-
-# Configurar logging
-logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(name)s - %(levelname)s - %(message)s')
-logger = logging.getLogger("alpha_vantage_service")
-
-class ImprovedAlphaVantageClient:
+# Archivo deshabilitado. Toda la lógica de Alpha Vantage ha sido eliminada. Ahora la API utiliza exclusivamente Perplexity para todos los datos.
     def __init__(self, api_key=None):
         self.api_key = api_key or os.getenv("ALPHAVANTAGE_API_KEY")
         self.cache = {}

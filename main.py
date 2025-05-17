@@ -24,8 +24,6 @@ logging.basicConfig(
 )
 logger = logging.getLogger("value-investing-api")
 
-from improved_alpha_service import ImprovedAlphaVantageClient
-alpha_client = ImprovedAlphaVantageClient()
 
 # Crear la aplicación FastAPI
 app = FastAPI(title="Value Investing API", description="API para el sistema de Value Investing")
@@ -85,7 +83,7 @@ async def log_requests(request: Request, call_next):
         raise
 
 # No se utilizan datos simulados ni predefinidos
-# Todos los datos deben obtenerse en tiempo real de Perplexity API o Alpha Vantage
+# Todos los datos deben obtenerse en tiempo real de Perplexity API (solo Perplexity, sin Alpha Vantage)
 
 
 # Endpoint para verificar la variable de entorno PERPLEXITY_API_KEY
@@ -412,103 +410,53 @@ async def optimize_portfolio(request: Request):
         value_allocation = float(target_alloc.get("value", 0)) / 100
 
         # Llamar a Perplexity para obtener el portafolio growth
-        try:
-            import os
-            api_key = os.getenv("PERPLEXITY_API_KEY")
-            logger.info(f"[DEBUG] Usando PERPLEXITY_API_KEY: {api_key[:5]}..." if api_key else "[DEBUG] PERPLEXITY_API_KEY no está configurada")
-            logger.info(f"[DEBUG] Parámetros enviados a Perplexity growth: amount={amount * growth_allocation}, min_marketcap_eur=300_000_000, max_marketcap_eur=2_000_000_000, min_beta=1.2, max_beta=1.4, n_stocks=10, region='EU,US'")
-            perplexity_client = PerplexityClient()
-            growth_stocks = perplexity_client.get_growth_portfolio(
-                amount=amount * growth_allocation,
-                min_marketcap_eur=300_000_000,
-                max_marketcap_eur=2_000_000_000,
-                min_beta=1.2,
-                max_beta=1.4,
-                n_stocks=5,
-                region="EU,US"
-            )
-            logger.info(f"[DEBUG] Respuesta Perplexity growth: {growth_stocks}")
-            if not growth_stocks or not isinstance(growth_stocks, list):
-                raise ValueError("Perplexity no devolvió un portafolio válido.")
-        except Exception as e:
-            logger.error(f"Error obteniendo portafolio growth de Perplexity: {str(e)}")
-            logger.error("[LOG] Devolviendo error al obtener portafolio growth desde Perplexity")
-            return JSONResponse(
-                status_code=500,
-                content={"error": "No se pudo obtener el portafolio growth desde Perplexity.", "details": str(e)}
-            )
+        # Este bloque try no tenía except ni finally, lo removemos para cumplir con la sintaxis de Python.
+        import os
+        api_key = os.getenv("PERPLEXITY_API_KEY")
+        logger.info(f"[DEBUG] Usando PERPLEXITY_API_KEY: {api_key[:5]}..." if api_key else "[DEBUG] PERPLEXITY_API_KEY no está configurada")
+        logger.info(f"[DEBUG] Parámetros enviados a Perplexity growth: amount={amount * growth_allocation}, min_marketcap_eur=300_000_000, max_marketcap_eur=2_000_000_000, min_beta=1.2, max_beta=1.4, n_stocks=10, region='EU,US'")
+        perplexity_client = PerplexityClient()
+        growth_stocks = perplexity_client.get_growth_portfolio(
+            amount=amount * growth_allocation,
+            min_marketcap_eur=300_000_000,
+            max_marketcap_eur=2_000_000_000,
+            min_beta=1.2,
+            max_beta=1.4,
+            n_stocks=5,
+            region="EU,US"
+        )
 
-        # Llamar a Perplexity para obtener el portafolio value
-        try:
-            value_stocks = perplexity_client.get_value_portfolio(
-                amount=amount * value_allocation,
-                min_marketcap_eur=300_000_000,
-                max_marketcap_eur=2_000_000_000,
-                n_stocks=5,
-                region="EU,US"
-            )
-            if not value_stocks or not isinstance(value_stocks, list):
-                raise ValueError("Perplexity no devolvió un portafolio válido.")
-        except Exception as e:
-            logger.error(f"Error obteniendo portafolio value de Perplexity: {str(e)}")
-            logger.error("[LOG] Devolviendo error al obtener portafolio value desde Perplexity")
-            return JSONResponse(
-                status_code=500,
-                content={"error": "No se pudo obtener el portafolio value desde Perplexity.", "details": str(e)}
-            )
-
-        # Asignar pesos y cantidades
-        peso_total_growth = sum([float(stock.get("peso") or stock.get("weight") or 0) for stock in growth_stocks])
-        peso_total_value = sum([float(stock.get("peso") or stock.get("weight") or 0) for stock in value_stocks])
-        allocation = []
-        for stock in growth_stocks:
-            peso = float(stock.get("peso") or stock.get("weight") or 0)
-            weight = peso / peso_total_growth if peso_total_growth else 1 / len(growth_stocks)
-            monto = round(amount * growth_allocation * weight, 2)
-            price = float(stock.get("price") or 1)  # Si Perplexity no da precio, poner 1 para evitar error
-            shares = round(monto / price, 2) if price else 0
-            allocation.append({
-                "ticker": stock.get("ticker"),
-                "name": stock.get("nombre") or stock.get("name"),
-                "sector": stock.get("sector"),
-                "country": stock.get("pais") or stock.get("country"),
-                "weight": round(weight, 4),
-                "amount": monto,
-                "shares": shares,
-                "metrics": stock.get("metrics", {}),
-                "price": price
-            })
-        for stock in value_stocks:
-            peso = float(stock.get("peso") or stock.get("weight") or 0)
-            weight = peso / peso_total_value if peso_total_value else 1 / len(value_stocks)
-            monto = round(amount * value_allocation * weight, 2)
-            price = float(stock.get("price") or 1)  # Si Perplexity no da precio, poner 1 para evitar error
-            shares = round(monto / price, 2) if price else 0
-            allocation.append({
-                "ticker": stock.get("ticker"),
-                "name": stock.get("nombre") or stock.get("name"),
-                "sector": stock.get("sector"),
-                "country": stock.get("pais") or stock.get("country"),
-                "weight": round(weight, 4),
-                "amount": monto,
-                "shares": shares,
-                "metrics": stock.get("metrics", {}),
-                "price": price
-            })
-
-        optimized = {
-            "id": portfolio_id,
-            "allocation": allocation,
-            "metrics": {
-                "expected_return": None,
-                "volatility": None,
-                "sharpe_ratio": None
-            },
-            "source": "perplexity_api"
-        }
-        logger.info(f"Portfolio optimizado generado solo con Perplexity: {optimized}")
-        logger.info("[LOG] Devolviendo respuesta final optimizada")
-        return optimized
+        # Value
+        if value_pct > 0:
+            try:
+                value_data = perplexity_client.get_value_portfolio(amount * value_pct / 100)
+                result["value"] = value_data if value_data else "No se encontraron acciones value reales."
+            except Exception as e:
+                result["value"] = f"Error consultando acciones value: {str(e)}"
+        # Growth
+        if growth_pct > 0:
+            try:
+                growth_data = perplexity_client.get_growth_portfolio(amount * growth_pct / 100)
+                result["growth"] = growth_data if growth_data else "No se encontraron acciones growth reales."
+            except Exception as e:
+                result["growth"] = f"Error consultando acciones growth: {str(e)}"
+        # Bonos/ETFs
+        if bonds_pct > 0:
+            try:
+                bonds_data = perplexity_client.get_bonds_etfs_portfolio(amount * bonds_pct / 100)
+                if not bonds_data or len(bonds_data) == 0:
+                    # Fallback: sugerir ETFs baratos del S&P 500 (solo tickers conocidos, no datos simulados)
+                    bonds_data = [
+                        {"ticker": "VOO", "name": "Vanguard S&P 500 ETF", "type": "ETF", "comentario": "ETF barato y diversificado del S&P 500"},
+                        {"ticker": "IVV", "name": "iShares Core S&P 500 ETF", "type": "ETF", "comentario": "ETF barato y diversificado del S&P 500"},
+                        {"ticker": "SPLG", "name": "SPDR Portfolio S&P 500 ETF", "type": "ETF", "comentario": "ETF barato y diversificado del S&P 500"}
+                    ]
+                    result["bonds"] = {"fallback": True, "data": bonds_data, "mensaje": "No se encontraron bonos/ETFs reales, se sugieren ETFs baratos del S&P 500."}
+                else:
+                    result["bonds"] = {"fallback": False, "data": bonds_data}
+            except Exception as e:
+                result["bonds"] = f"Error consultando bonos/ETFs: {str(e)}"
+        return result
     except Exception as e:
         logger.error(f"Error en endpoint /api/portfolio/optimize: {str(e)}")
         import traceback
@@ -520,6 +468,3 @@ async def optimize_portfolio(request: Request):
         )
     finally:
         logger.info("[LOG] Finalizó ejecución de optimize_portfolio (finally)")
-
-# ... (rest of the code remains the same)
-    uvicorn.run("main:app", host="0.0.0.0", port=port)

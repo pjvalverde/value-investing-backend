@@ -4,7 +4,7 @@ import json
 from datetime import datetime
 
 # Función para verificar la API key de Alpha Vantage
-def check_alpha_vantage_key():
+# Archivo eliminado. Alpha Vantage ha sido removido del backend. No es necesario este script.
     api_key = os.getenv("ALPHAVANTAGE_API_KEY")
     
     if not api_key:

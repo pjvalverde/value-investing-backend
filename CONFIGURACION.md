@@ -4,15 +4,7 @@
 
 Para que la aplicaciu00f3n funcione correctamente con datos REALES (no simulados), es necesario configurar las siguientes API keys:
 
-### 1. Alpha Vantage API Key
-
-Se utiliza para obtener precios reales de acciones y datos fundamentales.
-
-1. Regu00edstrate en [Alpha Vantage](https://www.alphavantage.co/support/#api-key)
-2. Obtiene tu API key gratuita
-3. Configura la variable de entorno `ALPHAVANTAGE_API_KEY` con tu clave
-
-### 2. Perplexity API Key
+### 1. Perplexity API Key
 
 Se utiliza para obtener recomendaciones de acciones basadas en criterios especu00edficos.
 
