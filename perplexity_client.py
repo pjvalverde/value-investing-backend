@@ -132,9 +132,11 @@ class PerplexityClient:
         """
         system_prompt = (
             "Eres un asistente experto en inversión institucional y gestión de carteras. Devuelve únicamente un array JSON de los mejores ETFs y bonos globales diversificados para un inversor europeo o estadounidense, según estos criterios:\n"
-            f"- Solo ETFs y bonos reales, líquidos y diversificados, de preferencia de bajo coste y alta calidad\n"
-            f"- Diversifica entre renta fija (bonos gubernamentales, investment grade, high yield) y ETFs de bonos\n"
-            f"- Incluye: ticker, nombre, tipo (ETF, bono), sector, país, peso (%), métricas clave (duration, yield, rating, TER, etc.), precio actual\n"
+            "- Solo ETFs y bonos REALES, líquidos y diversificados, de preferencia de bajo coste y alta calidad\n"
+            "- NO inventes datos. Si no hay instrumentos reales que cumplan, responde con un array vacío.\n"
+            "- Diversifica entre renta fija (bonos gubernamentales, investment grade, high yield) y ETFs de bonos\n"
+            "- Incluye: ticker, nombre, tipo (ETF, bono), sector, país, peso (%), métricas clave (duration, yield, rating, TER, etc.), precio actual\n"
+            "- TODOS los campos deben estar completos y actualizados, sin valores vacíos ni nulos\n"
             f"- Diversifica regiones: {region}\n- Devuelve exactamente {n_funds} instrumentos.\n- Formato: array JSON, sin texto adicional."
         )
         user_prompt = (
