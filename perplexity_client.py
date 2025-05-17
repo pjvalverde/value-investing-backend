@@ -133,11 +133,13 @@ class PerplexityClient:
             logger.error(f"Error al consultar Perplexity API: {str(e)}")
             raise
 
-    def get_disruptive_portfolio(self, amount, n_instruments=5, region="EU,US"):
+    def get_disruptive_portfolio(self, amount, n_instruments=5, region="EU,US", n_stocks=None):
         """
         Llama a Perplexity para obtener una lista óptima de instrumentos disruptivos (Private Equity, Tecnología Especializada, ETFs temáticos, fondos de VC, acciones disruptivas reales, etc) según los criterios dados por el usuario.
         Devuelve una lista con pesos sugeridos y métricas clave.
         """
+        if n_stocks is not None:
+            n_instruments = n_stocks
         system_prompt = (
             "Eres un asistente experto en inversión disruptiva y tecnología. Devuelve únicamente un array JSON de instrumentos reales y actuales en las siguientes categorías:\n"
             "- Private Equity (fondos de venture capital, private equity, startups de IA, biotecnología, etc)\n"
