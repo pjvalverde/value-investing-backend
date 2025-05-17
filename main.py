@@ -201,8 +201,9 @@ async def get_portfolio_disruptive(request: Request):
     try:
         data = await request.json()
         amount = float(data.get("amount", 10000))
+        n_stocks = int(data.get("n_stocks", 5))
         # Obtener datos reales de la API de Perplexity
-        disruptive_stocks = perplexity_client.get_disruptive_portfolio(amount=amount, n_stocks=5, region="EU,US")
+        disruptive_stocks = perplexity_client.get_disruptive_portfolio(amount=amount, n_stocks=n_stocks, region="EU,US")
         peso_total = sum([float(f.get("peso") or f.get("weight") or 0) for f in disruptive_stocks])
         allocation = []
         for f in disruptive_stocks:
