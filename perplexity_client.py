@@ -68,6 +68,34 @@ class PerplexityClient:
             logger.error(f"Error al consultar Perplexity API: {str(e)}")
             raise
 
+    def get_disruptive_etfs(self, amount, n_etfs=3, region="Global"):
+        """
+        Obtiene una lista de ETFs de tecnología disruptiva con datos reales de Perplexity.
+        """
+        system_prompt = (
+            "Eres un asistente experto en ETFs de tecnología disruptiva. Devuelve únicamente un array JSON con los "
+            f"{n_etfs} principales ETFs que inviertan en innovación, IA, robótica, semiconductores y tecnologías emergentes.\n"
+            "Cada ETF debe incluir los siguientes campos:\n"
+            "- ticker (ej. 'ARKK')\n"
+            "- name (nombre completo del ETF)\n"
+            "- sector (ej. 'Tecnología Disruptiva', 'Robótica', 'IA')\n"
+            "- country (país de origen o cobertura)\n"
+            "- price (precio actual en USD, debe ser un número real y actualizado)\n"
+            "- weight (peso sugerido en cartera, entre 0.1 y 0.5, la suma debe ser 1.0)\n"
+            "- metrics (objeto con métricas reales como expense_ratio, holdings, ytd_return, etc.)\n"
+            "Usa solo datos reales y actualizados.\n"
+            "Formato: array JSON, sin texto adicional."
+        )
+        
+        user_prompt = (
+            f"Dame una lista de los {n_etfs} mejores ETFs de tecnología disruptiva con sus precios actuales, "
+            f"métricas clave y un peso sugerido para una cartera de ${amount:,.2f}. "
+            f"Incluye ETFs que inviertan en innovación, IA, robótica y tecnologías emergentes. "
+            f"La región objetivo es: {region}."
+        )
+        
+        return self._call_perplexity(system_prompt, user_prompt)
+        
     def get_value_portfolio(self, amount, min_marketcap_eur=1_000_000_000, max_marketcap_eur=100_000_000_000, min_roe=12, max_per=18, max_debt=0.6, n_stocks=10, region="EU,US"):
         """
         Llama a Perplexity para obtener una lista óptima de acciones value (large cap, bajo PER, alto ROE, margen alto, deuda baja, moat cualitativo, etc).

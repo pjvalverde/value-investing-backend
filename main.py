@@ -207,6 +207,65 @@ async def get_portfolio_bonds(request: Request):
         logger.error(f"Error en /api/portfolio/bonds: {str(e)}")
         return JSONResponse(status_code=500, content={"error": str(e)})
 
+@app.post("/api/portfolio/disruptive")
+async def get_portfolio_disruptive(request: Request):
+    """
+    Obtiene una cartera de ETFs disruptivos utilizando Perplexity para obtener datos reales.
+    """
+    try:
+        data = await request.json()
+        amount = float(data.get("amount", 10000))
+        
+        # Obtener datos de ETFs disruptivos usando Perplexity
+        disruptive_etfs = perplexity_client.get_disruptive_etfs(
+            amount=amount,
+            n_etfs=3,  # Obtener 3 ETFs
+            region="Global"
+        )
+        
+        if not disruptive_etfs or not isinstance(disruptive_etfs, list):
+            raise ValueError("No se pudieron obtener datos de ETFs disruptivos")
+        
+        # Asegurar que los pesos sumen 1 (100%)
+        total_weight = sum(float(etf.get("weight", 0)) for etf in disruptive_etfs)
+        if total_weight <= 0:
+            # Si no hay pesos o suman 0, asignar pesos iguales
+            for etf in disruptive_etfs:
+                etf["weight"] = 1.0 / len(disruptive_etfs)
+        else:
+            # Normalizar los pesos para que sumen 1
+            for etf in disruptive_etfs:
+                etf["weight"] = float(etf.get("weight", 0)) / total_weight
+        
+        allocation = []
+        for etf in disruptive_etfs:
+            weight = float(etf.get("weight", 0))
+            monto = round(amount * weight, 2)
+            price = float(etf.get("price", 1))
+            shares = round(monto / price, 4) if price > 0 else 0
+            
+            allocation.append({
+                "ticker": etf.get("ticker"),
+                "name": etf.get("name"),
+                "sector": etf.get("sector"),
+                "country": etf.get("country"),
+                "weight": weight,
+                "amount": monto,
+                "shares": shares,
+                "metrics": etf.get("metrics", {}),
+                "price": price
+            })
+        
+        return {"allocation": allocation}
+        
+    except Exception as e:
+        logger.error(f"Error en /api/portfolio/disruptive: {str(e)}")
+        logger.error(f"Traceback: {traceback.format_exc()}")
+        return JSONResponse(
+            status_code=500, 
+            content={"error": f"Error al obtener cartera disruptiva: {str(e)}"}
+        )
+
 @app.post("/api/portfolio/analysis")
 @app.post("/api/portfolio/claude-analysis")
 async def portfolio_analysis(request: Request):
@@ -278,21 +337,23 @@ async def recommend_portfolio(request: Request):
         from backend.services.portfolio_service import portfolio_service
         import asyncio
 
-        # Lógica de asignación base según perfil de riesgo
+        # Mapa de asignación por perfil de riesgo
         alloc_map = {
-            "conservative": {"value": 50, "growth": 20, "bonds": 30},
-            "balanced": {"value": 40, "growth": 40, "bonds": 20},
-            "aggressive": {"value": 25, "growth": 65, "bonds": 10}
+            "conservative": {"value": 40, "growth": 20, "bonds": 30, "disruptive": 10},
+            "balanced": {"value": 30, "growth": 30, "bonds": 20, "disruptive": 20},
+            "aggressive": {"value": 20, "growth": 45, "bonds": 10, "disruptive": 25}
         }
         target_alloc = alloc_map.get(risk_profile, alloc_map["balanced"])
 
-        # Ajustar según horizonte (más largo = más growth, menos bonds)
+        # Ajustar según horizonte (más largo = más growth y disruptive, menos bonds)
         if investment_horizon == "long":
-            target_alloc["growth"] += 10
+            target_alloc["growth"] += 5
+            target_alloc["disruptive"] += 5
             target_alloc["bonds"] -= 10
         elif investment_horizon == "short":
             target_alloc["bonds"] += 10
-            target_alloc["growth"] -= 10
+            target_alloc["growth"] -= 5
+            target_alloc["disruptive"] -= 5
 
         # Normalizar si algún valor sale de rango
         total = sum(target_alloc.values())
@@ -303,26 +364,59 @@ async def recommend_portfolio(request: Request):
         value_stocks = portfolio_service._get_value_stocks(3)
         growth_stocks = portfolio_service._get_growth_stocks(3)
         bond_etfs = portfolio_service._get_bond_etfs(1)
+        # Datos para la categoría disruptiva
+        disruptive_etfs = [
+            {
+                "ticker": "ARKK",
+                "name": "ARK Innovation ETF",
+                "sector": "Tecnología Disruptiva",
+                "country": "US",
+                "weight": 0.4,
+                "price": 50.0,
+                "metrics": {"expense_ratio": 0.75, "holdings": 35, "ytd_return": 35.2}
+            },
+            {
+                "ticker": "BOTZ",
+                "name": "Global X Robotics & AI ETF",
+                "sector": "Robótica e IA",
+                "country": "Global",
+                "weight": 0.3,
+                "price": 28.50,
+                "metrics": {"expense_ratio": 0.68, "holdings": 45, "ytd_return": 22.1}
+            },
+            {
+                "ticker": "SMH",
+                "name": "VanEck Semiconductor ETF",
+                "sector": "Semiconductores",
+                "country": "Global",
+                "weight": 0.3,
+                "price": 180.25,
+                "metrics": {"expense_ratio": 0.35, "holdings": 25, "ytd_return": 28.7}
+            }
+        ]
 
         # Construir la estructura del portafolio recomendado
         portfolio = {
             "value": value_stocks,
             "growth": growth_stocks,
-            "bonds": bond_etfs
+            "bonds": bond_etfs,
+            "disruptive": disruptive_etfs
         }
 
         # Calcular métricas estimadas (usando lógica interna)
         metrics = portfolio_service._calculate_portfolio_metrics(
             [dict(weight=target_alloc['value']/100, **s) for s in value_stocks],
             [dict(weight=target_alloc['growth']/100, **s) for s in growth_stocks],
-            [dict(weight=target_alloc['bonds']/100, **s) for s in bond_etfs]
+            [dict(weight=target_alloc['bonds']/100, **s) for s in bond_etfs],
+            [dict(weight=target_alloc['disruptive']/100, **s) for s in disruptive_etfs]
         )
 
         # Justificación de la composición
         justifications = {
             "value": "Acciones seleccionadas por criterios de value investing con potencial de revalorización y baja valoración relativa.",
             "growth": "Empresas de alto crecimiento, usualmente small/micro caps, con fuerte momentum de ingresos y beneficios.",
-            "bonds": "ETFs de bonos para diversificación y reducción de volatilidad, ajustados al perfil de riesgo."
+            "bonds": "ETFs de bonos para diversificación y reducción de volatilidad, ajustados al perfil de riesgo.",
+            "disruptive": "ETFs de tecnología disruptiva que invierten en innovación, IA, robótica y semiconductores para exposición a crecimiento a largo plazo."
         }
 
         return {
