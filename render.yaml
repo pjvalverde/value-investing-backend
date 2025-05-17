@@ -3,7 +3,7 @@ services:
     name: value-investing-api
     env: python
     buildCommand: pip install -r requirements.txt
-    startCommand: gunicorn app_direct:app -k uvicorn.workers.UvicornWorker --bind 0.0.0.0:$PORT
+    startCommand: gunicorn app_direct:app --worker-class uvicorn.workers.UvicornWorker --bind 0.0.0.0:$PORT
     envVars:
       - key: PORT
         value: 8000
@@ -11,3 +11,7 @@ services:
         sync: false
       - key: CLAUDE_API_KEY
         sync: false
+      - key: PERPLEXITY_API_KEY
+        sync: false
+    plan: free
+    autoDeploy: true

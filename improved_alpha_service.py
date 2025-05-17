@@ -20,8 +20,9 @@ class ImprovedAlphaVantageClient:
         
         # Verificar API key
         if not self.api_key:
-            logger.error("API key de Alpha Vantage no configurada. Se usaru00e1n datos simulados.")
-            print("ERROR: ALPHAVANTAGE_API_KEY no configurada. Configurar en variables de entorno.")
+            error_msg = "ERROR: ALPHAVANTAGE_API_KEY no configurada. Configurar en variables de entorno."
+            logger.error(error_msg)
+            raise ValueError(error_msg)
         else:
             logger.info("Alpha Vantage API key configurada correctamente.")
             print("ALPHAVANTAGE_API_KEY configurada correctamente.")
