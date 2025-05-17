@@ -113,7 +113,14 @@ class PerplexityClient:
                 try:
                     # Sanitizar: eliminar guiones bajos en los números antes de parsear
                     json_str_clean = json_str.replace('_', '')
-                    stocks_data = json.loads(json_str_clean)
+                    try:
+                        stocks_data = json.loads(json_str_clean)
+                    except json.JSONDecodeError as e:
+                        import re
+                        # Intenta arreglar claves y valores con comillas simples
+                        json_str_fixed = re.sub(r"(?<=[:,\[\{])\s*'([^']*)'\s*:", r'"\1":', json_str_clean)  # claves
+                        json_str_fixed = re.sub(r":\s*'([^']*)'", r':"\1"', json_str_fixed)                # valores
+                        stocks_data = json.loads(json_str_fixed)
                     logger.info(f"Portafolio value obtenido con {len(stocks_data)} acciones")
                     return stocks_data
                 except Exception as e:
@@ -125,6 +132,7 @@ class PerplexityClient:
         except Exception as e:
             logger.error(f"Error al consultar Perplexity API: {str(e)}")
             raise
+
     def get_bonds_etfs_portfolio(self, amount, n_funds=5, region="EU,US"):
         """
         Llama a Perplexity para obtener una lista óptima de ETFs y bonos globales diversificados según los criterios dados.
