@@ -183,6 +183,48 @@ async def get_portfolio_growth(request: Request):
         logger.error(f"Error en /api/portfolio/growth: {str(e)}")
         return JSONResponse(status_code=500, content={"error": str(e)})
 
+@app.post("/api/portfolio/disruptive")
+async def get_portfolio_disruptive(request: Request):
+    try:
+        data = await request.json()
+        amount = float(data.get("amount", 10000))
+        n_stocks = int(data.get("n_stocks", 8))
+        region = data.get("region", "US,EU,Global")
+        disruptive_instruments = perplexity_client.get_disruptive_portfolio(
+            amount=amount,
+            n_stocks=n_stocks,
+            region=region
+        )
+        if not disruptive_instruments or not isinstance(disruptive_instruments, list):
+            raise ValueError("Perplexity no devolvió un portafolio disruptivo válido.")
+        # Asignar pesos y cantidades (si aplica)
+        peso_total = sum([float(item.get("peso") or item.get("weight") or 0) for item in disruptive_instruments])
+        allocation = []
+        for item in disruptive_instruments:
+            peso = float(item.get("peso") or item.get("weight") or 0)
+            weight = peso / peso_total if peso_total else 1 / len(disruptive_instruments)
+            monto = round(amount * weight, 2)
+            price = float(item.get("price") or 1)
+            shares = round(monto / price, 2) if price else 0
+            allocation.append({
+                "ticker": item.get("ticker"),
+                "name": item.get("nombre") or item.get("name"),
+                "type": item.get("tipo") or item.get("type"),
+                "sector": item.get("sector"),
+                "country": item.get("pais") or item.get("country"),
+                "weight": round(weight, 4),
+                "amount": monto,
+                "shares": shares,
+                "metrics": item.get("metrics", {}),
+                "price": price,
+                "annual_return": item.get("rentabilidad_historica") or item.get("annual_return"),
+                "risk": item.get("riesgo") or item.get("volatilidad") or item.get("risk")
+            })
+        return {"allocation": allocation}
+    except Exception as e:
+        logger.error(f"Error en /api/portfolio/disruptive: {str(e)}")
+        return JSONResponse(status_code=500, content={"error": str(e)})
+
 @app.post("/api/portfolio/bonds")
 async def get_portfolio_bonds(request: Request):
     try:
