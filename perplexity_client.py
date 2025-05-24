@@ -85,7 +85,7 @@ class PerplexityClient:
             f"- Deuda/Equity máxima {max_debt}\n"
             "- Margen de beneficio alto, moat cualitativo fuerte (ventaja competitiva),\n"
             "- Solo datos reales y actuales\n"
-            "- Incluye: ticker, nombre, sector, país, marketcap, PER, ROE, deuda, margen, moat, peso (%), métricas clave\n"
+            "- Incluye: ticker, nombre, sector, país, marketcap, PER, ROE, deuda, margen, moat, peso (%), métricas clave\n- El campo 'metrics' debe ser un objeto JSON con métricas clave de value investing: ROC (Return on Capital), Cash Flow, P/E (Price/Earnings), Dividend Yield, Debt/Equity, Margen Operativo, Margen Neto, FCF Yield, EV/EBITDA, crecimiento de ingresos, etc. Si alguna métrica no está disponible, omítela.\n"
             f"- Diversifica sectores y países.\n- Devuelve exactamente {n_stocks} acciones.\n- Formato: array JSON, sin texto adicional."
         )
         user_prompt = (
@@ -259,7 +259,7 @@ class PerplexityClient:
             f"- Deuda/Equity máxima {max_debt}\n"
             "- Margen de beneficio alto, moat cualitativo fuerte (ventaja competitiva),\n"
             "- Solo datos reales y actuales\n"
-            "- Incluye: ticker, nombre, sector, país, marketcap, PER, ROE, deuda, margen, moat, peso (%), métricas clave\n"
+            "- Incluye: ticker, nombre, sector, país, marketcap, PER, ROE, deuda, margen, moat, peso (%), métricas clave\n- El campo 'metrics' debe ser un objeto JSON con métricas clave de value investing: ROC (Return on Capital), Cash Flow, P/E (Price/Earnings), Dividend Yield, Debt/Equity, Margen Operativo, Margen Neto, FCF Yield, EV/EBITDA, crecimiento de ingresos, etc. Si alguna métrica no está disponible, omítela.\n"
             f"- Diversifica sectores y países.\n- Devuelve exactamente {n_stocks} acciones.\n- Formato: array JSON, sin texto adicional."
         )
         user_prompt = (
