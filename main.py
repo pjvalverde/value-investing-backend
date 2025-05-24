@@ -161,7 +161,7 @@ async def get_portfolio_bonds(request: Request):
                 "price": price,
                 "tipo": "bonds"
             })
-        return {"allocation": allocation}
+        return {"allocation": {"disruptive": allocation}}
     except Exception as e:
         logger.error(f"Error en /api/portfolio/bonds: {str(e)}")
         import traceback
@@ -211,7 +211,7 @@ async def get_portfolio_value(request: Request):
                 "price": price,
                 "tipo": "value"
             })
-        return {"allocation": allocation}
+        return {"allocation": {"disruptive": allocation}}
     except Exception as e:
         logger.error(f"Error en /api/portfolio/value: {str(e)}")
         return JSONResponse(status_code=500, content={"error": str(e)})
@@ -253,7 +253,7 @@ async def get_portfolio_growth(request: Request):
                 "price": price,
                 "tipo": "value"
             })
-        return {"allocation": allocation}
+        return {"allocation": {"disruptive": allocation}}
     except Exception as e:
         logger.error(f"Error en /api/portfolio/growth: {str(e)}")
         return JSONResponse(status_code=500, content={"error": str(e)})
@@ -309,7 +309,7 @@ async def get_portfolio_disruptive(request: Request):
                 "tipo": "disruptive"
             })
         
-        return {"allocation": allocation}
+        return {"allocation": {"disruptive": allocation}}
         
     except Exception as e:
         logger.error(f"Error en /api/portfolio/disruptive: {str(e)}")
