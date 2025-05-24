@@ -305,7 +305,7 @@ async def get_portfolio_disruptive(request: Request):
                 "shares": shares,
                 "metrics": etf.get("metrics", {}),
                 "price": price,
-                "tipo": "bonds"
+                "tipo": "disruptive"
             })
         
         return {"allocation": allocation}
@@ -363,7 +363,7 @@ async def get_portfolio_disruptive(request: Request):
                 "shares": shares,
                 "metrics": etf.get("metrics", {}),
                 "price": price,
-                "tipo": "bonds"
+                "tipo": "disruptive"
             })
         
         return {"allocation": allocation}
