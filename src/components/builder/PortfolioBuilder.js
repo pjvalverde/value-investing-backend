@@ -9,9 +9,10 @@ const PortfolioBuilder = () => {
     amount: 10000,
     horizon: 'largo',
     allocation: {
-      bonds: 25,
-      value: 50,
-      growth: 25
+      bonds: 0,
+      value: 0,
+      growth: 0,
+      disruptive: 0
     }
   });
   const [portfolio, setPortfolio] = useState(null);
@@ -52,7 +53,8 @@ const PortfolioBuilder = () => {
       const target_alloc = {
         value: parseInt(formData.allocation.value),
         growth: parseInt(formData.allocation.growth),
-        bonds: parseInt(formData.allocation.bonds)
+        bonds: parseInt(formData.allocation.bonds),
+        disruptive: parseInt(formData.allocation.disruptive)
       };
       
       const amount = parseFloat(formData.amount);
@@ -159,10 +161,51 @@ const PortfolioBuilder = () => {
             <h2>Paso 2: Asignación de activos</h2>
             <p>Distribuye tu inversión entre las diferentes estrategias (total debe sumar 100%)</p>
 
-            <AllocationStepper
-              allocation={formData.allocation}
-              onChange={handleAllocationChange}
-            />
+            {/* Inputs manuales para cada categoría de asignación */}
+            <div className="form-group">
+              <label>Value (%)</label>
+              <input
+                type="number"
+                value={formData.allocation.value}
+                onChange={e => handleAllocationChange('value', e.target.value)}
+                min="0"
+                max="100"
+                step="1"
+              />
+            </div>
+            <div className="form-group">
+              <label>Growth (%)</label>
+              <input
+                type="number"
+                value={formData.allocation.growth}
+                onChange={e => handleAllocationChange('growth', e.target.value)}
+                min="0"
+                max="100"
+                step="1"
+              />
+            </div>
+            <div className="form-group">
+              <label>Bonds (%)</label>
+              <input
+                type="number"
+                value={formData.allocation.bonds}
+                onChange={e => handleAllocationChange('bonds', e.target.value)}
+                min="0"
+                max="100"
+                step="1"
+              />
+            </div>
+            <div className="form-group">
+              <label>Disruptive (%)</label>
+              <input
+                type="number"
+                value={formData.allocation.disruptive}
+                onChange={e => handleAllocationChange('disruptive', e.target.value)}
+                min="0"
+                max="100"
+                step="1"
+              />
+            </div>
 
             <div className="buttons-container">
               <button
