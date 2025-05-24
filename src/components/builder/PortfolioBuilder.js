@@ -16,6 +16,7 @@ const PortfolioBuilder = () => {
     }
   });
   const [portfolio, setPortfolio] = useState(null);
+const [disruptiveLoading, setDisruptiveLoading] = useState(false);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
 
@@ -89,7 +90,33 @@ const PortfolioBuilder = () => {
     }
   };
 
-  return (
+  // Nueva función para buscar solo ETFs disruptivos
+const handleDisruptiveSearch = async () => {
+  setDisruptiveLoading(true);
+  setError("");
+  try {
+    const BASE_URL = process.env.REACT_APP_BACKEND_URL || 'http://localhost:8000';
+    const amount = parseFloat(formData.amount);
+    const response = await fetch(`${BASE_URL}/api/portfolio/disruptive`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ amount: amount })
+    });
+    if (!response.ok) {
+      const errorData = await response.text();
+      throw new Error(`Error al buscar ETFs disruptivos: ${response.status} ${errorData}`);
+    }
+    const data = await response.json();
+    setPortfolio({ allocation: data.allocation, source: 'disruptive' });
+    setStep(3);
+  } catch (err) {
+    setError(err.message || 'Error desconocido al buscar ETFs disruptivos');
+  } finally {
+    setDisruptiveLoading(false);
+  }
+};
+
+return (
     <div className="portfolio-builder-container">
       <h1>Portfolio Builder</h1>
       <p className="subtitle">Construye tu portfolio optimizado basado en estrategias de Value Investing</p>
@@ -221,6 +248,15 @@ const PortfolioBuilder = () => {
                 disabled={loading}
               >
                 {loading ? 'Optimizando...' : 'Optimizar Portfolio'}
+              </button>
+
+              <button
+                className="disruptive-button"
+                onClick={handleDisruptiveSearch}
+                disabled={disruptiveLoading}
+                style={{ marginLeft: 8 }}
+              >
+                {disruptiveLoading ? 'Buscando Disruptivos...' : 'Buscar ETFs Disruptivos'}
               </button>
             </div>
 
