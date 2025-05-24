@@ -260,64 +260,7 @@ async def get_portfolio_growth(request: Request):
 
 @app.post("/api/portfolio/disruptive")
 async def get_portfolio_disruptive(request: Request):
-    """
-    Obtiene una cartera de ETFs disruptivos utilizando Perplexity para obtener datos reales.
-    """
-    try:
-        data = await request.json()
-        amount = float(data.get("amount", 10000))
-        region = data.get("region", "US,EU,ASIA,BR")
-        # Obtener datos de ETFs disruptivos usando Perplexity
-        disruptive_etfs = perplexity_client.get_disruptive_etfs(
-            amount=amount,
-            n_etfs=3,  # Obtener 3 ETFs
-            region=region
-        )
-        if not disruptive_etfs or not isinstance(disruptive_etfs, list) or len(disruptive_etfs) == 0:
-            return JSONResponse(status_code=200, content={"allocation": [], "message": "No se encontraron ETFs disruptivos para los criterios seleccionados."})
-            raise ValueError("No se pudieron obtener datos de ETFs disruptivos")
-        
-        # Asegurar que los pesos sumen 1 (100%)
-        total_weight = sum(float(etf.get("weight", 0)) for etf in disruptive_etfs)
-        if total_weight <= 0:
-            # Si no hay pesos o suman 0, asignar pesos iguales
-            for etf in disruptive_etfs:
-                etf["weight"] = 1.0 / len(disruptive_etfs)
-        else:
-            # Normalizar los pesos para que sumen 1
-            for etf in disruptive_etfs:
-                etf["weight"] = float(etf.get("weight", 0)) / total_weight
-        
-        allocation = []
-        for etf in disruptive_etfs:
-            weight = float(etf.get("weight", 0))
-            monto = round(amount * weight, 2)
-            price = float(etf.get("price", 1))
-            shares = round(monto / price, 4) if price > 0 else 0
-            
-            allocation.append({
-                "ticker": etf.get("ticker"),
-                "name": etf.get("name"),
-                "sector": etf.get("sector"),
-                "country": etf.get("country"),
-                "weight": weight,
-                "amount": monto,
-                "shares": shares,
-                "metrics": etf.get("metrics", {}),
-                "price": price,
-                "tipo": "disruptive"
-            })
-        
-        return {"allocation": allocation}
-        
-    except Exception as e:
-        logger.error(f"Error en /api/portfolio/disruptive: {str(e)}")
-        import traceback
-        logger.error(traceback.format_exc())
-        return JSONResponse(
-            status_code=500, 
-            content={"error": f"Error al obtener cartera disruptiva: {str(e)}"}
-        )
+
     """
     Obtiene una cartera de ETFs disruptivos utilizando Perplexity para obtener datos reales.
     """
