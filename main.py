@@ -158,7 +158,8 @@ async def get_portfolio_bonds(request: Request):
                 "amount": monto,
                 "shares": shares,
                 "metrics": etf.get("metrics", {}),
-                "price": price
+                "price": price,
+                "tipo": "bonds"
             })
         return {"allocation": allocation}
     except Exception as e:
@@ -207,7 +208,8 @@ async def get_portfolio_value(request: Request):
                 "amount": monto,
                 "shares": shares,
                 "metrics": stock.get("metrics", {}),
-                "price": price
+                "price": price,
+                "tipo": "value"
             })
         return {"allocation": allocation}
     except Exception as e:
@@ -248,7 +250,8 @@ async def get_portfolio_growth(request: Request):
                 "amount": monto,
                 "shares": shares,
                 "metrics": stock.get("metrics", {}),
-                "price": price
+                "price": price,
+                "tipo": "value"
             })
         return {"allocation": allocation}
     except Exception as e:
@@ -301,7 +304,8 @@ async def get_portfolio_disruptive(request: Request):
                 "amount": monto,
                 "shares": shares,
                 "metrics": etf.get("metrics", {}),
-                "price": price
+                "price": price,
+                "tipo": "bonds"
             })
         
         return {"allocation": allocation}
@@ -358,7 +362,8 @@ async def get_portfolio_disruptive(request: Request):
                 "amount": monto,
                 "shares": shares,
                 "metrics": etf.get("metrics", {}),
-                "price": price
+                "price": price,
+                "tipo": "bonds"
             })
         
         return {"allocation": allocation}
