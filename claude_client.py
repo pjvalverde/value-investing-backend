@@ -6,7 +6,7 @@ logger = logging.getLogger("claude-client")
 
 ANTHROPIC_URL = "https://api.anthropic.com/v1/messages"
 ANTHROPIC_VERSION = "2023-06-01"
-MODEL_DEFAULT = os.getenv("CLAUDE_MODEL", "claude-3-7-sonnet-20250219")
+MODEL_DEFAULT = os.getenv("CLAUDE_MODEL", "claude-3-5-sonnet-latest")
 
 
 class ClaudeClient:
@@ -94,4 +94,61 @@ class ClaudeClient:
             return ("\n".join(parts)).strip() or "[Sin contenido]"
         except Exception as e:
             logger.error("Error al llamar a Claude: %s", e)
+            raise
+
+    def generate_decision(self, analysis_text: str, portfolio_hint: dict | None = None, language: str = "es"):
+        """Ask Claude to return a strict JSON decision to invest or not.
+        Returns dict with keys: decision (invertir|no_invertir), score (0-100), reasons (list[str]), alerts (list[str]).
+        """
+        instruction = (
+            "Eres un CIO con filosofía de Value Investing (Buffett y Munger). "
+            "Con base en el análisis anterior, devuelve SOLO un objeto JSON estricto con: "
+            "decision ('invertir' o 'no_invertir'), score (0-100), reasons (lista corta), alerts (lista corta). "
+            "No incluyas texto adicional."
+        )
+        context = portfolio_hint or {}
+        user_content = (
+            f"{instruction}\n\nANÁLISIS:\n{analysis_text}\n\nPISTAS_PORTAFOLIO(JSON opcional):\n{context}"
+        )
+        payload = {
+            "model": self.model,
+            "max_tokens": 400,
+            "temperature": 0.2,
+            "messages": [{"role": "user", "content": user_content}],
+        }
+        headers = {
+            "x-api-key": self.api_key,
+            "anthropic-version": ANTHROPIC_VERSION,
+            "content-type": "application/json",
+        }
+        try:
+            resp = requests.post(ANTHROPIC_URL, headers=headers, json=payload, timeout=45)
+            if resp.status_code != 200:
+                logger.error("Claude decision API error %s: %s", resp.status_code, resp.text[:500])
+                raise RuntimeError(f"Claude API error {resp.status_code}")
+            data = resp.json()
+            blocks = data.get("content") or []
+            text = "".join([b.get("text", "") for b in blocks if isinstance(b, dict) and b.get("type") == "text"]).strip()
+            import json as _json
+            # Try parse as JSON
+            try:
+                parsed = _json.loads(text)
+            except Exception:
+                # Attempt to extract JSON object substring
+                start = text.find("{")
+                end = text.rfind("}")
+                if start != -1 and end != -1 and end > start:
+                    parsed = _json.loads(text[start:end+1])
+                else:
+                    raise RuntimeError("Claude did not return JSON")
+            # Normalize
+            decision = (parsed.get("decision") or "").lower()
+            if decision not in ("invertir", "no_invertir"):
+                decision = "no_invertir"
+            score = int(float(parsed.get("score", 0)))
+            reasons = parsed.get("reasons") or parsed.get("razones") or []
+            alerts = parsed.get("alerts") or parsed.get("alertas") or []
+            return {"decision": decision, "score": score, "reasons": reasons, "alerts": alerts}
+        except Exception as e:
+            logger.error("Error al obtener decisión de Claude: %s", e)
             raise

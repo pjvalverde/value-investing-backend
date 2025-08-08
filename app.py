@@ -320,6 +320,29 @@ async def build_portfolio_category(category: str, request: Request):
         logging.error(f"Error building portfolio for {category}: {e}")
         return JSONResponse(status_code=500, content={"error": str(e)})
 
+
+@app.post("/api/analysis/decision")
+async def investment_decision(request: Request):
+    """Return invest/no-invest decision based on prior Claude analysis text or portfolio.
+    Body: { analysis: str, portfolio?: {...} }
+    """
+    try:
+        body = await request.json()
+        analysis_text = body.get("analysis", "")
+        portfolio_hint = body.get("portfolio")
+    except Exception:
+        return JSONResponse(status_code=400, content={"error": "Invalid JSON body"})
+
+    if not ClaudeClient:
+        return JSONResponse(status_code=500, content={"error": "Claude client not available on server"})
+    try:
+        claude = ClaudeClient()
+        decision = claude.generate_decision(analysis_text, portfolio_hint)
+        return decision
+    except Exception as e:
+        logging.error(f"Decision error: {e}")
+        return JSONResponse(status_code=500, content={"error": f"Claude decision error: {e}"})
+
 # Status endpoint for monitoring
 @app.get("/api/status")
 def api_status():
