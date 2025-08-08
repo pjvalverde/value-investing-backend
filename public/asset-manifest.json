@@ -1,15 +1,15 @@
 {
   "files": {
-    "main.css": "/value-investing-frontend-clean/static/css/main.da1e7cca.css",
-    "main.js": "/value-investing-frontend-clean/static/js/main.1c311496.js",
-    "static/js/453.c061e938.chunk.js": "/value-investing-frontend-clean/static/js/453.c061e938.chunk.js",
-    "index.html": "/value-investing-frontend-clean/index.html",
-    "main.da1e7cca.css.map": "/value-investing-frontend-clean/static/css/main.da1e7cca.css.map",
-    "main.1c311496.js.map": "/value-investing-frontend-clean/static/js/main.1c311496.js.map",
-    "453.c061e938.chunk.js.map": "/value-investing-frontend-clean/static/js/453.c061e938.chunk.js.map"
+    "main.css": "/static/css/main.da1e7cca.css",
+    "main.js": "/static/js/main.fce05cbd.js",
+    "static/js/453.c061e938.chunk.js": "/static/js/453.c061e938.chunk.js",
+    "index.html": "/index.html",
+    "main.da1e7cca.css.map": "/static/css/main.da1e7cca.css.map",
+    "main.fce05cbd.js.map": "/static/js/main.fce05cbd.js.map",
+    "453.c061e938.chunk.js.map": "/static/js/453.c061e938.chunk.js.map"
   },
   "entrypoints": [
     "static/css/main.da1e7cca.css",
-    "static/js/main.1c311496.js"
+    "static/js/main.fce05cbd.js"
   ]
 }
