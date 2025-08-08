@@ -1,6 +1,7 @@
 import os
 import logging
 import requests
+from typing import Optional
 
 logger = logging.getLogger("claude-client")
 
@@ -96,7 +97,7 @@ class ClaudeClient:
             logger.error("Error al llamar a Claude: %s", e)
             raise
 
-    def generate_decision(self, analysis_text: str, portfolio_hint: dict | None = None, language: str = "es"):
+    def generate_decision(self, analysis_text: str, portfolio_hint: Optional[dict] = None, language: str = "es"):
         """Ask Claude to return a strict JSON decision to invest or not.
         Returns dict with keys: decision (invertir|no_invertir), score (0-100), reasons (list[str]), alerts (list[str]).
         """
