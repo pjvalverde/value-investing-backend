@@ -6,7 +6,7 @@ logger = logging.getLogger("claude-client")
 
 ANTHROPIC_URL = "https://api.anthropic.com/v1/messages"
 ANTHROPIC_VERSION = "2023-06-01"
-MODEL_DEFAULT = "claude-3-7-sonnet-20250219"
+MODEL_DEFAULT = os.getenv("CLAUDE_MODEL", "claude-3-7-sonnet-20250219")
 
 
 class ClaudeClient:
