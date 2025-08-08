@@ -223,51 +223,6 @@ def _compute_allocation(items: list, amount: float):
     return allocation
 
 
-@app.post("/api/portfolio/{category}")
-async def build_portfolio_category(category: str, request: Request):
-    """Build a portfolio slice using Perplexity for a given category.
-    Supported categories: value, growth, bonds, disruptive.
-    Body: { amount: number }
-    """
-    try:
-        body = await request.json()
-        amount = float(body.get("amount", 0))
-    except Exception:
-        return JSONResponse(status_code=400, content={"error": "Invalid JSON body"})
-
-    if not PerplexityClient:
-        return JSONResponse(status_code=500, content={"error": "Perplexity client not available on server"})
-    try:
-        client = PerplexityClient()
-    except Exception as e:
-        # Most likely missing API key
-        logging.error(f"Perplexity init error: {e}")
-        return JSONResponse(status_code=500, content={"error": f"Perplexity no disponible: {e}"})
-
-    try:
-        items: list
-        if category == "value":
-            items = client.get_value_portfolio(amount)
-        elif category == "growth":
-            items = client.get_growth_portfolio(amount)
-        elif category == "bonds":
-            items = client.get_bond_etfs(amount)
-        elif category == "disruptive":
-            # Prefer ETFs for quick results
-            try:
-                items = client.get_disruptive_etfs(amount)
-            except Exception:
-                items = client.get_disruptive_portfolio(amount)
-        else:
-            return JSONResponse(status_code=404, content={"error": f"Categoría desconocida: {category}"})
-
-        allocation = _compute_allocation(items, amount)
-        return {"allocation": allocation, "sourceCount": len(items)}
-    except Exception as e:
-        logging.error(f"Error building portfolio for {category}: {e}")
-        return JSONResponse(status_code=500, content={"error": str(e)})
-
-
 @app.post("/api/portfolio/claude-analysis")
 async def portfolio_claude_analysis(request: Request):
     """Generate a qualitative analysis using Claude.
@@ -314,6 +269,56 @@ async def portfolio_claude_analysis(request: Request):
     except Exception as e:
         logging.error(f"Claude analysis error: {e}")
         return JSONResponse(status_code=500, content={"error": f"Claude error: {e}"})
+
+# Provide an alias path that won't be captured by the category route
+@app.post("/api/analysis/claude")
+async def portfolio_claude_analysis_alias(request: Request):
+    return await portfolio_claude_analysis(request)
+
+
+@app.post("/api/portfolio/{category}")
+async def build_portfolio_category(category: str, request: Request):
+    """Build a portfolio slice using Perplexity for a given category.
+    Supported categories: value, growth, bonds, disruptive.
+    Body: { amount: number }
+    """
+    try:
+        body = await request.json()
+        amount = float(body.get("amount", 0))
+    except Exception:
+        return JSONResponse(status_code=400, content={"error": "Invalid JSON body"})
+
+    if not PerplexityClient:
+        return JSONResponse(status_code=500, content={"error": "Perplexity client not available on server"})
+    try:
+        client = PerplexityClient()
+    except Exception as e:
+        # Most likely missing API key
+        logging.error(f"Perplexity init error: {e}")
+        return JSONResponse(status_code=500, content={"error": f"Perplexity no disponible: {e}"})
+
+    try:
+        items: list
+        if category == "value":
+            items = client.get_value_portfolio(amount)
+        elif category == "growth":
+            items = client.get_growth_portfolio(amount)
+        elif category == "bonds":
+            items = client.get_bond_etfs(amount)
+        elif category == "disruptive":
+            # Prefer ETFs for quick results
+            try:
+                items = client.get_disruptive_etfs(amount)
+            except Exception:
+                items = client.get_disruptive_portfolio(amount)
+        else:
+            return JSONResponse(status_code=404, content={"error": f"Categoría desconocida: {category}"})
+
+        allocation = _compute_allocation(items, amount)
+        return {"allocation": allocation, "sourceCount": len(items)}
+    except Exception as e:
+        logging.error(f"Error building portfolio for {category}: {e}")
+        return JSONResponse(status_code=500, content={"error": str(e)})
 
 # Status endpoint for monitoring
 @app.get("/api/status")
