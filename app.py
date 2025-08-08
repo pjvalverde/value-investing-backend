@@ -11,6 +11,16 @@ from fastapi.responses import JSONResponse, FileResponse
 from fastapi.staticfiles import StaticFiles
 from pathlib import Path
 
+# External AI clients
+try:
+    from perplexity_client import PerplexityClient
+except Exception:
+    PerplexityClient = None  # type: ignore
+try:
+    from claude_client import ClaudeClient
+except Exception:
+    ClaudeClient = None  # type: ignore
+
 # Configurar logging
 logging.basicConfig(level=logging.INFO)
 
@@ -174,6 +184,136 @@ async def optimize_portfolio(request: Request):
             status_code=500,
             content={"error": "Error al optimizar portfolio", "details": str(e)}
         )
+
+# --- Real-time portfolio from Perplexity ---
+def _compute_allocation(items: list, amount: float):
+    """Convert Perplexity items into allocation list with shares and amounts.
+    Expected fields in item: ticker (or symbol), name, price, weight (0-1 or 0-100).
+    """
+    allocation = []
+    if not items:
+        return allocation
+    for it in items:
+        symbol = it.get("ticker") or it.get("symbol") or it.get("Ticker") or "N/A"
+        name = it.get("name") or it.get("Name") or it.get("nombre") or symbol
+        price = it.get("price") or it.get("Price") or it.get("precio") or 100
+        # weight could be 0-1, 0-100, or missing
+        weight = it.get("weight") or it.get("peso") or it.get("Weight") or 0
+        try:
+            w = float(weight)
+            if w > 1.5:  # interpret as percent
+                w = w / 100.0
+            if w <= 0:
+                w = 1.0 / max(1, len(items))
+        except Exception:
+            w = 1.0 / max(1, len(items))
+        try:
+            px = float(price)
+        except Exception:
+            px = 100.0
+        allocated = amount * w
+        shares = int(max(0, allocated // px))
+        allocation.append({
+            "symbol": symbol,
+            "name": name,
+            "price": px,
+            "shares": shares,
+            "amount": round(shares * px, 2),
+        })
+    return allocation
+
+
+@app.post("/api/portfolio/{category}")
+async def build_portfolio_category(category: str, request: Request):
+    """Build a portfolio slice using Perplexity for a given category.
+    Supported categories: value, growth, bonds, disruptive.
+    Body: { amount: number }
+    """
+    try:
+        body = await request.json()
+        amount = float(body.get("amount", 0))
+    except Exception:
+        return JSONResponse(status_code=400, content={"error": "Invalid JSON body"})
+
+    if not PerplexityClient:
+        return JSONResponse(status_code=500, content={"error": "Perplexity client not available on server"})
+    try:
+        client = PerplexityClient()
+    except Exception as e:
+        # Most likely missing API key
+        logging.error(f"Perplexity init error: {e}")
+        return JSONResponse(status_code=500, content={"error": f"Perplexity no disponible: {e}"})
+
+    try:
+        items: list
+        if category == "value":
+            items = client.get_value_portfolio(amount)
+        elif category == "growth":
+            items = client.get_growth_portfolio(amount)
+        elif category == "bonds":
+            items = client.get_bond_etfs(amount)
+        elif category == "disruptive":
+            # Prefer ETFs for quick results
+            try:
+                items = client.get_disruptive_etfs(amount)
+            except Exception:
+                items = client.get_disruptive_portfolio(amount)
+        else:
+            return JSONResponse(status_code=404, content={"error": f"Categoría desconocida: {category}"})
+
+        allocation = _compute_allocation(items, amount)
+        return {"allocation": allocation, "sourceCount": len(items)}
+    except Exception as e:
+        logging.error(f"Error building portfolio for {category}: {e}")
+        return JSONResponse(status_code=500, content={"error": str(e)})
+
+
+@app.post("/api/portfolio/claude-analysis")
+async def portfolio_claude_analysis(request: Request):
+    """Generate a qualitative analysis using Claude.
+    Body: { portfolio: { allocation: {category: [...] } } }
+    """
+    try:
+        body = await request.json()
+        portfolio = body.get("portfolio") or {}
+    except Exception:
+        return JSONResponse(status_code=400, content={"error": "Invalid JSON body"})
+
+    if not ClaudeClient:
+        return JSONResponse(status_code=500, content={"error": "Claude client not available on server"})
+    try:
+        claude = ClaudeClient()
+    except Exception as e:
+        logging.error(f"Claude init error: {e}")
+        return JSONResponse(status_code=500, content={"error": f"Claude no disponible: {e}"})
+
+    # Flatten positions for prompt simplicity
+    flat_positions = []
+    try:
+        allocation = (portfolio or {}).get("allocation", {})
+        for _category, positions in allocation.items():
+            if isinstance(positions, dict):
+                positions = list(positions.values())
+            if isinstance(positions, list):
+                for p in positions:
+                    flat_positions.append({
+                        "ticker": p.get("symbol") or p.get("ticker"),
+                        "name": p.get("name"),
+                        "price": p.get("price"),
+                        "shares": p.get("shares"),
+                        "amount": p.get("amount"),
+                        "weight": p.get("weight"),
+                        "metrics": p.get("metrics", {}),
+                    })
+    except Exception:
+        pass
+
+    try:
+        analysis = claude.generate_analysis(flat_positions, language="es")
+        return {"analysis": analysis}
+    except Exception as e:
+        logging.error(f"Claude analysis error: {e}")
+        return JSONResponse(status_code=500, content={"error": str(e)})
 
 # Status endpoint for monitoring
 @app.get("/api/status")
