@@ -313,7 +313,7 @@ async def portfolio_claude_analysis(request: Request):
         return {"analysis": analysis}
     except Exception as e:
         logging.error(f"Claude analysis error: {e}")
-        return JSONResponse(status_code=500, content={"error": str(e)})
+        return JSONResponse(status_code=500, content={"error": f"Claude error: {e}"})
 
 # Status endpoint for monitoring
 @app.get("/api/status")

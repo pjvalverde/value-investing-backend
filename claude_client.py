@@ -1,63 +1,97 @@
 import os
 import logging
-from anthropic import Anthropic, AsyncAnthropic, HUMAN_PROMPT, AI_PROMPT
+import requests
 
 logger = logging.getLogger("claude-client")
 
+ANTHROPIC_URL = "https://api.anthropic.com/v1/messages"
+ANTHROPIC_VERSION = "2023-06-01"
+MODEL_DEFAULT = "claude-3-7-sonnet-20250219"
+
+
 class ClaudeClient:
-    def __init__(self, api_key=None):
-        self.api_key = api_key or os.getenv("CLAUDE_API_KEY")
+    """Minimal client that calls Anthropic's HTTP API directly.
+    Accepts ANTHROPIC_API_KEY or CLAUDE_API_KEY.
+    """
+
+    def __init__(self, api_key=None, model: str = MODEL_DEFAULT):
+        self.api_key = (
+            api_key
+            or os.getenv("ANTHROPIC_API_KEY")
+            or os.getenv("CLAUDE_API_KEY")
+        )
         if not self.api_key:
-            raise ValueError("CLAUDE_API_KEY is not set in environment variables.")
-        self.client = Anthropic(api_key=self.api_key)
+            raise ValueError("Set ANTHROPIC_API_KEY (or CLAUDE_API_KEY) in environment variables.")
+        self.model = model
 
     def generate_analysis(self, portfolio, strategy_description=None, language="es"):
-        """
-        Generate a detailed qualitative analysis for a portfolio using Claude.
-        Args:
-            portfolio (list): List of dicts with stock info (ticker, sector, metrics, allocation, etc.).
-            strategy_description (str): Optional description of the investment strategy.
-            language (str): Output language ('es' for Spanish, 'en' for English).
-        Returns:
-            str: Claude's analysis.
-        """
-        prompt = (
-            f"{HUMAN_PROMPT} Eres un analista financiero experto en inversión cuantitativa y value investing. "
-            f"Te entrego la composición de un portafolio optimizado. "
-            f"Primero, presenta una tabla en formato Markdown con las siguientes columnas: Ticker, Estrategia, Sector, País, Peso (%), Precio, Acciones, Valor, Métricas clave. "
-            f"Usa los datos que te proporciono abajo. Después de la tabla, redacta un análisis profesional, recomendaciones y alertas visuales si detectas riesgos o concentraciones. "
+        """Generate a detailed qualitative analysis for a portfolio using Claude."""
+        # Build prompt
+        header = (
+            "Eres un analista financiero experto en inversión cuantitativa y value investing. "
+            "Te entrego la composición de un portafolio optimizado. "
+            "Primero, presenta una tabla en formato Markdown con las siguientes columnas: "
+            "Ticker, Estrategia, Sector, País, Peso (%), Precio, Acciones, Valor, Métricas clave. "
+            "Usa los datos que te proporciono abajo. Después de la tabla, redacta un análisis profesional, "
+            "recomendaciones y alertas visuales si detectas riesgos o concentraciones. "
             f"El análisis debe estar en {language}.\n"
         )
         if strategy_description:
-            prompt += f"\nDescripción de la estrategia: {strategy_description}\n"
-        prompt += "\nComposición del portafolio:\n"
-        prompt += "| Ticker | Estrategia | Sector | País | Peso (%) | Precio | Acciones | Valor | Métricas clave |\n"
-        prompt += "|--------|------------|--------|------|----------|--------|----------|-------|----------------|\n"
-        for stock in portfolio:
-            peso = stock.get('peso')
-            if peso is None:
-                peso = stock.get('weight')
+            header += f"\nDescripción de la estrategia: {strategy_description}\n"
+        table = [
+            "\nComposición del portafolio:",
+            "| Ticker | Estrategia | Sector | País | Peso (%) | Precio | Acciones | Valor | Métricas clave |",
+            "|--------|------------|--------|------|----------|--------|----------|-------|----------------|",
+        ]
+        for stock in portfolio or []:
+            peso = stock.get("peso", stock.get("weight"))
             try:
-                peso_float = float(peso)
-                peso_str = f"{peso_float:.2f}%"
-            except (TypeError, ValueError):
+                peso_str = f"{float(peso):.2f}%" if peso is not None else "-"
+            except Exception:
                 peso_str = "-"
-            metrics = stock.get('metrics', {})
-            metrics_str = ', '.join([f"{k}: {v}" for k, v in metrics.items()]) if metrics else '-'
-            prompt += f"| {stock.get('ticker','-')} | {stock.get('estrategia', stock.get('strategy','-'))} | {stock.get('sector','-')} | {stock.get('country','-')} | {peso_str} | {stock.get('price','-')} | {stock.get('shares','-')} | {stock.get('amount','-')} | {metrics_str} |\n"
-        prompt += "\nAhora, debajo de la tabla, presenta un análisis profesional, recomendaciones y alertas visuales si detectas riesgos o concentraciones.\n"
-        prompt += f"{AI_PROMPT}"
-        try:
-            response = self.client.messages.create(
-                model="claude-3-7-sonnet-20250219",
-                max_tokens=800,
-                temperature=0.7,
-                messages=[
-                    {"role": "user", "content": prompt}
-                ]
+            metrics = stock.get("metrics", {}) or {}
+            metrics_str = ", ".join([f"{k}: {v}" for k, v in metrics.items()]) if metrics else "-"
+            table.append(
+                f"| {stock.get('ticker', stock.get('symbol','-'))} | "
+                f"{stock.get('estrategia', stock.get('strategy','-'))} | "
+                f"{stock.get('sector','-')} | {stock.get('country','-')} | {peso_str} | "
+                f"{stock.get('price','-')} | {stock.get('shares','-')} | {stock.get('amount','-')} | {metrics_str} |"
             )
-            # El contenido viene como una lista de bloques, usualmente uno solo
-            return response.content[0].text.strip() if response.content else "[Sin respuesta de Claude]"
+        footer = (
+            "\nAhora, debajo de la tabla, presenta un análisis profesional, recomendaciones y alertas visuales "
+            "si detectas riesgos o concentraciones."
+        )
+        user_content = "\n".join([header] + table + [footer])
+
+        payload = {
+            "model": self.model,
+            "max_tokens": 800,
+            "temperature": 0.7,
+            "messages": [
+                {"role": "user", "content": user_content}
+            ],
+        }
+        headers = {
+            "x-api-key": self.api_key,
+            "anthropic-version": ANTHROPIC_VERSION,
+            "content-type": "application/json",
+        }
+        try:
+            resp = requests.post(ANTHROPIC_URL, headers=headers, json=payload, timeout=60)
+            if resp.status_code != 200:
+                logger.error("Claude API error %s: %s", resp.status_code, resp.text[:500])
+                raise RuntimeError(f"Claude API error {resp.status_code}")
+            data = resp.json()
+            # messages API returns a list of content blocks
+            blocks = data.get("content") or []
+            if not blocks:
+                return "[Sin respuesta de Claude]"
+            parts = []
+            for b in blocks:
+                # text blocks have type "text"
+                if isinstance(b, dict) and b.get("type") == "text":
+                    parts.append(b.get("text", ""))
+            return ("\n".join(parts)).strip() or "[Sin contenido]"
         except Exception as e:
-            logger.error(f"Error al llamar a Claude: {str(e)}")
-            return f"[Error al generar análisis con Claude: {e}]"
+            logger.error("Error al llamar a Claude: %s", e)
+            raise
