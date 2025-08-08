@@ -7,13 +7,19 @@ import uuid
 from datetime import datetime
 from fastapi import FastAPI, Request, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import JSONResponse
+from fastapi.responses import JSONResponse, FileResponse
+from fastapi.staticfiles import StaticFiles
+from pathlib import Path
 
 # Configurar logging
 logging.basicConfig(level=logging.INFO)
 
 # Crear la aplicación FastAPI
 app = FastAPI(title="Value Investing API", description="API para el sistema de Value Investing")
+
+# Fallback datasets (avoid NameError if not imported elsewhere)
+VALUE_STOCKS: list = []
+GROWTH_STOCKS: list = []
 
 # Permitir acceso desde el frontend React - Configuración explícita de CORS
 origins = [
@@ -32,6 +38,15 @@ app.add_middleware(
     expose_headers=["Content-Type"],
     max_age=600,  # 10 minutos
 )
+
+# --- Static files (React build) ---
+# Serve assets built into backend/public
+# public/index.html must exist (copied from frontend build)
+try:
+    app.mount("/static", StaticFiles(directory="public/static"), name="static")
+except Exception:
+    # Ignore if already mounted
+    pass
 
 # Agregar middleware para loguear todas las solicitudes
 @app.middleware("http")
@@ -160,10 +175,12 @@ async def optimize_portfolio(request: Request):
             content={"error": "Error al optimizar portfolio", "details": str(e)}
         )
 
+# Status endpoint for monitoring
+@app.get("/api/status")
+def api_status():
+    return {"status": "ok"}
+
 # Rutas de prueba
-@app.get("/")
-def root():
-    return {"message": "Value Investing API - Versión 2.0"}
 
 @app.get("/test")
 def test():
@@ -173,7 +190,34 @@ def test():
 @app.get("/api/test")
 def api_test():
     logging.info("Ruta de prueba API accedida")
-    return {"status": "ok", "data": {"value_stocks": len(VALUE_STOCKS), "growth_stocks": len(GROWTH_STOCKS)}}
+    # Manejar variables opcionales en tiempo de ejecución
+    try:
+        value_count = len(VALUE_STOCKS)
+    except Exception:
+        value_count = 0
+    try:
+        growth_count = len(GROWTH_STOCKS)
+    except Exception:
+        growth_count = 0
+    return {"status": "ok", "data": {"value_stocks": value_count, "growth_stocks": growth_count}}
+
+# --- SPA entry and catch-all (must be after API routes) ---
+INDEX_FILE = Path("public") / "index.html"
+
+@app.get("/", include_in_schema=False)
+def serve_index():
+    # Serve React index.html at root
+    return FileResponse(INDEX_FILE)
+
+@app.get("/{full_path:path}", include_in_schema=False)
+def spa_catch_all(full_path: str):
+    # Do not intercept API routes
+    if full_path.startswith("api/"):
+        raise HTTPException(status_code=404)
+    file_path = Path("public") / full_path
+    if file_path.is_file():
+        return FileResponse(file_path)
+    return FileResponse(INDEX_FILE)
 
 # Ejecutar la aplicación si se llama directamente
 if __name__ == "__main__":
