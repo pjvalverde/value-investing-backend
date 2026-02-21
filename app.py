@@ -321,6 +321,49 @@ async def build_portfolio_category(category: str, request: Request):
         return JSONResponse(status_code=500, content={"error": str(e)})
 
 
+@app.post("/api/portfolio/historical-batch")
+async def historical_batch(request: Request):
+    """Get normalized historical price data for multiple tickers using yfinance."""
+    try:
+        body = await request.json()
+        tickers = body.get("tickers", [])
+        period = body.get("period", "1y")
+    except Exception:
+        return JSONResponse(status_code=400, content={"error": "Invalid JSON"})
+
+    if not tickers:
+        return JSONResponse(status_code=400, content={"error": "No tickers provided"})
+
+    valid_periods = {"1mo", "3mo", "6mo", "1y", "3y", "5y"}
+    if period not in valid_periods:
+        period = "1y"
+
+    try:
+        import yfinance as yf
+        result = {}
+        for ticker in tickers[:10]:  # Max 10 tickers
+            try:
+                stock = yf.Ticker(str(ticker).upper())
+                hist = stock.history(period=period)
+                if hist.empty:
+                    logging.warning(f"No data for ticker {ticker}")
+                    continue
+                data = [
+                    {"date": date.strftime("%Y-%m-%d"), "close": round(float(row["Close"]), 2)}
+                    for date, row in hist.iterrows()
+                ]
+                result[ticker] = data
+            except Exception as e:
+                logging.warning(f"Could not fetch {ticker}: {e}")
+                continue
+        return result
+    except ImportError:
+        return JSONResponse(status_code=500, content={"error": "yfinance not installed on server"})
+    except Exception as e:
+        logging.error(f"Historical batch error: {e}")
+        return JSONResponse(status_code=500, content={"error": str(e)})
+
+
 @app.post("/api/analysis/decision")
 async def investment_decision(request: Request):
     """Return invest/no-invest decision based on prior Claude analysis text or portfolio.
