@@ -296,9 +296,29 @@ async def portfolio_claude_analysis_alias(request: Request):
     return await portfolio_claude_analysis(request)
 
 
+def _yf_fallback(category: str, amount: float) -> list:
+    """Use yfinance curated portfolios as fallback when Perplexity is unavailable."""
+    try:
+        from yfinance_portfolios import (
+            get_value_portfolio_yf, get_growth_portfolio_yf,
+            get_bond_etfs_yf, get_disruptive_etfs_yf,
+        )
+        if category == "value":
+            return get_value_portfolio_yf(amount)
+        elif category == "growth":
+            return get_growth_portfolio_yf(amount)
+        elif category == "bonds":
+            return get_bond_etfs_yf(amount)
+        elif category == "disruptive":
+            return get_disruptive_etfs_yf(amount)
+    except Exception as e:
+        logging.error(f"yfinance fallback error for {category}: {e}")
+    return []
+
+
 @app.post("/api/portfolio/{category}")
 async def build_portfolio_category(category: str, request: Request):
-    """Build a portfolio slice using Perplexity for a given category.
+    """Build a portfolio slice. Tries Perplexity first; falls back to yfinance.
     Supported categories: value, growth, bonds, disruptive.
     Body: { amount: number }
     """
@@ -308,37 +328,43 @@ async def build_portfolio_category(category: str, request: Request):
     except Exception:
         return JSONResponse(status_code=400, content={"error": "Invalid JSON body"})
 
-    if not PerplexityClient:
-        return JSONResponse(status_code=500, content={"error": "Perplexity client not available on server"})
-    try:
-        client = PerplexityClient()
-    except Exception as e:
-        # Most likely missing API key
-        logging.error(f"Perplexity init error: {e}")
-        return JSONResponse(status_code=500, content={"error": f"Perplexity no disponible: {e}"})
+    if category not in ("value", "growth", "bonds", "disruptive"):
+        return JSONResponse(status_code=404, content={"error": f"Categoría desconocida: {category}"})
 
-    try:
-        items: list
-        if category == "value":
-            items = client.get_value_portfolio(amount)
-        elif category == "growth":
-            items = client.get_growth_portfolio(amount)
-        elif category == "bonds":
-            items = client.get_bond_etfs(amount)
-        elif category == "disruptive":
-            # Prefer ETFs for quick results
-            try:
-                items = client.get_disruptive_etfs(amount)
-            except Exception:
-                items = client.get_disruptive_portfolio(amount)
-        else:
-            return JSONResponse(status_code=404, content={"error": f"Categoría desconocida: {category}"})
+    items: list = []
+    source = "perplexity"
 
-        allocation = _compute_allocation(items, amount)
-        return {"allocation": allocation, "sourceCount": len(items)}
-    except Exception as e:
-        logging.error(f"Error building portfolio for {category}: {e}")
-        return JSONResponse(status_code=500, content={"error": str(e)})
+    # ── Try Perplexity first ──────────────────────────────────────────────────
+    perplexity_ok = False
+    if PerplexityClient:
+        try:
+            client = PerplexityClient()
+            if category == "value":
+                items = client.get_value_portfolio(amount)
+            elif category == "growth":
+                items = client.get_growth_portfolio(amount)
+            elif category == "bonds":
+                items = client.get_bond_etfs(amount)
+            elif category == "disruptive":
+                try:
+                    items = client.get_disruptive_etfs(amount)
+                except Exception:
+                    items = client.get_disruptive_portfolio(amount)
+            perplexity_ok = bool(items)
+        except Exception as e:
+            logging.warning(f"Perplexity unavailable for {category}: {e}. Falling back to yfinance.")
+
+    # ── Fall back to yfinance if Perplexity failed or returned empty ──────────
+    if not perplexity_ok:
+        logging.info(f"Using yfinance fallback for {category}")
+        items = _yf_fallback(category, amount)
+        source = "yfinance"
+
+    if not items:
+        return JSONResponse(status_code=500, content={"error": f"No se pudo obtener datos para {category}"})
+
+    allocation = _compute_allocation(items, amount)
+    return {"allocation": allocation, "sourceCount": len(items), "source": source}
 
 
 @app.post("/api/portfolio/historical-batch")
