@@ -7,7 +7,7 @@ import uuid
 from datetime import datetime
 from fastapi import FastAPI, Request, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import JSONResponse, FileResponse
+from fastapi.responses import JSONResponse, FileResponse, StreamingResponse
 from fastapi.staticfiles import StaticFiles
 from pathlib import Path
 
@@ -294,6 +294,158 @@ async def portfolio_claude_analysis(request: Request):
 @app.post("/api/analysis/claude")
 async def portfolio_claude_analysis_alias(request: Request):
     return await portfolio_claude_analysis(request)
+
+
+@app.post("/api/portfolio/claude-stream")
+async def claude_stream_analysis(request: Request):
+    """Stream Claude portfolio analysis as SSE — avoids Heroku H12 30-second timeout.
+    Body: { portfolio: { allocation: {category: [...] } } }
+    """
+    import requests as _requests
+
+    try:
+        body = await request.json()
+        portfolio = body.get("portfolio") or {}
+    except Exception:
+        return JSONResponse(status_code=400, content={"error": "Invalid JSON body"})
+
+    # Flatten positions
+    flat_positions = []
+    try:
+        allocation = (portfolio or {}).get("allocation", {})
+        for _category, positions in allocation.items():
+            if isinstance(positions, dict):
+                positions = list(positions.values())
+            if isinstance(positions, list):
+                for p in positions:
+                    flat_positions.append({
+                        "ticker":    p.get("symbol") or p.get("ticker", "-"),
+                        "name":      p.get("name", "-"),
+                        "sector":    p.get("sector", "-"),
+                        "country":   p.get("country") or p.get("país", "-"),
+                        "category":  p.get("category") or p.get("estrategia", "-"),
+                        "weight":    p.get("weight") or p.get("peso"),
+                        "roe":       p.get("roe"),
+                        "deuda":     p.get("deuda"),
+                        "margen":    p.get("margen"),
+                        "per":       p.get("per"),
+                        "moat":      p.get("moat", ""),
+                        "metrics":   p.get("metrics", {}),
+                    })
+    except Exception as e:
+        logging.error(f"Error flattening portfolio for stream: {e}")
+
+    if not flat_positions:
+        return JSONResponse(status_code=400, content={"error": "No positions in portfolio"})
+
+    api_key = os.getenv("CLAUDE_API_KEY") or os.getenv("ANTHROPIC_API_KEY")
+    if not api_key:
+        return JSONResponse(status_code=500, content={"error": "No Claude API key configured"})
+
+    model = os.getenv("CLAUDE_MODEL", "claude-sonnet-4-5-20250929")
+
+    system_prompt = (
+        "Eres un comité de inversión de élite formado por Warren Buffett, Charlie Munger y Aswath Damodaran. "
+        "Analizas portafolios con rigor usando sus metodologías combinadas y das una opinión DIRECTA y ACCIONABLE. "
+        "Usa los datos reales provistos (ROIC, EV/EBITDA, FCF Yield, ROE, márgenes, deuda, margen de seguridad). "
+        "Sé específico con los tickers y métricas concretas. Responde en español. Máximo 550 palabras."
+    )
+
+    # Build metrics table
+    table_lines = [
+        "PORTAFOLIO — DATOS REALES DE MERCADO:",
+        "| Ticker | Sector | Peso% | ROIC% | EV/EBITDA | FCF Yield% | ROE% | D/E | Margen% | MoS% |",
+        "|--------|--------|-------|-------|-----------|------------|------|-----|---------|------|",
+    ]
+    for s in flat_positions:
+        m = s.get("metrics") or {}
+        peso = s.get("weight")
+        try:
+            peso_str = f"{float(peso):.1f}" if peso is not None else "-"
+        except Exception:
+            peso_str = "-"
+        table_lines.append(
+            f"| {s['ticker']} | {s['sector']} | {peso_str}% | "
+            f"{m.get('roic', '-')} | {m.get('ev_ebitda', '-')} | {m.get('fcf_yield', '-')} | "
+            f"{s.get('roe', '-')} | {s.get('deuda', '-')} | {s.get('margen', '-')} | "
+            f"{m.get('margin_of_safety', '-')} |"
+        )
+
+    user_content = (
+        "\n".join(table_lines) + "\n\n"
+        "Analiza este portafolio como el comité. Estructura tu respuesta así:\n\n"
+        "## 🏛 Warren Buffett — Calidad y Moat\n"
+        "Evalúa el moat, ROE, márgenes y calidad de negocio para las posiciones clave. ¿Comprarías y mantendrías 10 años?\n\n"
+        "## 🧠 Charlie Munger — Modelos Mentales\n"
+        "Evalúa la diversificación sectorial, calidad vs precio y red flags psicológicas. ¿Son negocios excelentes o mediocres?\n\n"
+        "## 📐 Aswath Damodaran — Rigor Cuantitativo\n"
+        "Analiza ROIC vs WACC estimado (8.5%), EV/EBITDA vs sector, FCF Yield y margen de seguridad DCF. ¿Los números justifican la inversión?\n\n"
+        "## 📊 Veredicto del Comité\n"
+        "Decisión: **INVERTIR** / **VIGILAR** / **EVITAR** — Puntuación: X/100 — 3 razones concretas basadas en métricas."
+    )
+
+    payload = {
+        "model": model,
+        "max_tokens": 800,
+        "temperature": 0.55,
+        "stream": True,
+        "system": system_prompt,
+        "messages": [{"role": "user", "content": user_content}],
+    }
+    headers_api = {
+        "x-api-key": api_key,
+        "anthropic-version": "2023-06-01",
+        "content-type": "application/json",
+    }
+
+    def generate():
+        try:
+            resp = _requests.post(
+                "https://api.anthropic.com/v1/messages",
+                headers=headers_api,
+                json=payload,
+                stream=True,
+                timeout=120,
+            )
+            if resp.status_code != 200:
+                err_text = resp.text[:500]
+                logging.error(f"Claude stream API error {resp.status_code}: {err_text}")
+                yield f"data: {json.dumps({'error': f'Claude API error {resp.status_code}: {err_text}'})}\n\n"
+                yield "data: [DONE]\n\n"
+                return
+
+            for line in resp.iter_lines():
+                if not line:
+                    continue
+                line_str = line.decode("utf-8") if isinstance(line, bytes) else line
+                if line_str.startswith("data: "):
+                    data_str = line_str[6:]
+                    if data_str == "[DONE]":
+                        break
+                    try:
+                        event = json.loads(data_str)
+                        if event.get("type") == "content_block_delta":
+                            text = event.get("delta", {}).get("text", "")
+                            if text:
+                                yield f"data: {json.dumps({'text': text})}\n\n"
+                    except Exception:
+                        pass
+
+            yield "data: [DONE]\n\n"
+
+        except Exception as e:
+            logging.error(f"Streaming generate error: {e}")
+            yield f"data: {json.dumps({'error': str(e)})}\n\n"
+            yield "data: [DONE]\n\n"
+
+    return StreamingResponse(
+        generate(),
+        media_type="text/event-stream",
+        headers={
+            "Cache-Control": "no-cache",
+            "X-Accel-Buffering": "no",
+        },
+    )
 
 
 def _yf_fallback(category: str, amount: float) -> list:
