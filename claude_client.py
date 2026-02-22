@@ -108,7 +108,7 @@ class ClaudeClient:
 
         payload = {
             "model": self.model,
-            "max_tokens": 1400,
+            "max_tokens": 700,
             "temperature": 0.65,
             "system": system_prompt,
             "messages": [{"role": "user", "content": user_content}],
