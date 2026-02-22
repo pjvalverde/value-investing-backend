@@ -188,7 +188,8 @@ async def optimize_portfolio(request: Request):
 # --- Real-time portfolio from Perplexity ---
 def _compute_allocation(items: list, amount: float):
     """Convert Perplexity items into allocation list with shares and amounts.
-    Expected fields in item: ticker (or symbol), name, price, weight (0-1 or 0-100).
+    Preserves all original Perplexity fields (metrics, sector, PER, ROE, etc.).
+    Uses fractional shares so every position has a meaningful dollar allocation.
     """
     allocation = []
     if not items:
@@ -201,7 +202,7 @@ def _compute_allocation(items: list, amount: float):
         weight = it.get("weight") or it.get("peso") or it.get("Weight") or 0
         try:
             w = float(weight)
-            if w > 1.5:  # interpret as percent
+            if w > 1.5:  # interpret as percent (0-100 scale)
                 w = w / 100.0
             if w <= 0:
                 w = 1.0 / max(1, len(items))
@@ -209,16 +210,35 @@ def _compute_allocation(items: list, amount: float):
             w = 1.0 / max(1, len(items))
         try:
             px = float(price)
+            if px <= 0:
+                px = 100.0
         except Exception:
             px = 100.0
-        allocated = amount * w
-        shares = int(max(0, allocated // px))
+
+        allocated = round(amount * w, 2)
+        # Use fractional shares so high-price stocks still show a real allocation
+        shares = round(allocated / px, 4)
+
         allocation.append({
+            # Core position fields
             "symbol": symbol,
             "name": name,
-            "price": px,
+            "price": round(px, 2),
             "shares": shares,
-            "amount": round(shares * px, 2),
+            "amount": allocated,
+            # Fundamental data forwarded from Perplexity
+            "sector":   it.get("sector")   or it.get("Sector")   or "",
+            "country":  it.get("país")     or it.get("country")  or it.get("Country") or "",
+            "per":      it.get("PER")      or it.get("per")      or it.get("pe_ratio") or None,
+            "roe":      it.get("ROE")      or it.get("roe")      or None,
+            "deuda":    it.get("deuda")    or it.get("debt_equity") or None,
+            "margen":   it.get("margen")   or it.get("margin")   or None,
+            "moat":     it.get("moat")     or it.get("Moat")     or "",
+            "beta":     it.get("beta")     or it.get("Beta")     or None,
+            "marketcap":it.get("marketcap")or it.get("MarketCap")or None,
+            "categoria":it.get("categoría")or it.get("categoria")or it.get("category") or "",
+            # Damodaran metrics object (ev_ebitda, roic, fcf_yield, etc.)
+            "metrics":  it.get("metrics") or {},
         })
     return allocation
 
